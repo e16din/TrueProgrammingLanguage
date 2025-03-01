@@ -10,11 +10,12 @@ fun main() {
     val code = """
         :start: import androidx.compose.material3.Button
         :start: import androidx.compose.material3.Text
-        `Button(onClick = { it ->
-            $-> it 
+        `Button(onClick = {
+            |onClick()| : () -> Unit|
         }) {
-            Text($0)
+            Text(|text| : String|)
         }` = Button
+            
             
         :start: 
         :start: 
@@ -89,13 +90,38 @@ fun translateToKotlin(source: String): String {
         val startKeyword = ":start: "
         when {
             !isComment && isAnotherCode -> {
-                if(line.contains("`")){
+                if (line.contains("`")) {
                     val names = line.split("=")[1]
                     val name = names.split(",")[0].trim()
 
-                    anotherCode += "${getTabs(tabsCounter)}${line.replaceAfter("`", "").dropLast(1)}\n"
+                    anotherCode += "${getTabs(tabsCounter)}${
+                        line.replaceAfter("`", "").dropLast(1)
+                    }\n"
                     functionNames.add(name)
-                    resultCode += "fun $name() =\n$anotherCode\n"
+                    var args = ""
+                    var index = anotherCode.indexOf("|")
+                    while (index != -1) {
+                        var index2 = anotherCode.indexOf("|", startIndex = index + 1)
+                        val argName = anotherCode.substring(index + 1, index2)
+                        var index3 = anotherCode.indexOf("|", startIndex = index2 + 1)
+                        val argType = anotherCode.substring(index2 + 1, index3)
+
+                        val bracketIndexStart = argName.indexOf("(")
+                        var clearedArgName = ""
+                        if (bracketIndexStart != -1) {
+                            val bracketIndexEnd = argName.indexOf(")")
+                            clearedArgName =
+                                argName.replaceRange(bracketIndexStart, bracketIndexEnd+1, "")
+                        }else {
+                            clearedArgName = argName
+                        }
+                        args += "$clearedArgName$argType, "
+                        anotherCode = anotherCode.replaceRange(index2, index3 + 1, "")
+                            .replaceRange(index, index + 1, "")
+
+                        index = anotherCode.indexOf("|")
+                    }
+                    resultCode += "fun $name($args) =\n$anotherCode\n"
 
                     isAnotherCode = false
                     anotherCode = ""
@@ -104,6 +130,7 @@ fun translateToKotlin(source: String): String {
                     anotherCode += "${getTabs(tabsCounter)}${line}\n"
                 }
             }
+
             !isComment && line.startsWith("`") -> {
                 tabsCounter += 1
                 isAnotherCode = true
@@ -132,7 +159,11 @@ fun translateToKotlin(source: String): String {
                 if (items[0].contains("->")) {
                     val items2 = items[0].split("->")
                     resultCode += "${getTabs(tabsCounter)}fun $name() {\n"
-                    resultCode += "${getTabs(tabsCounter + 1)}if (${items2[0].trim()}) {\n${getTabs(tabsCounter + 2)}${items2[1].trim()}\n${
+                    resultCode += "${getTabs(tabsCounter + 1)}if (${items2[0].trim()}) {\n${
+                        getTabs(
+                            tabsCounter + 2
+                        )
+                    }${items2[1].trim()}\n${
                         getTabs(
                             tabsCounter + 1
                         )
@@ -147,15 +178,21 @@ fun translateToKotlin(source: String): String {
 
                     var normalizedValue = translateFunctionCalls(value)
 
-                    resultCode += "${getTabs(tabsCounter)}fun $name() =\n${getTabs(tabsCounter+1)}${if (isList) "mutableListOf(" else ""}${unpackList(
-                        normalizedValue
-                    )}${if (isList) ")" else ""}\n${getTabs(tabsCounter)}\n"
+                    resultCode += "${getTabs(tabsCounter)}fun $name() =\n${getTabs(tabsCounter + 1)}${if (isList) "mutableListOf(" else ""}${
+                        unpackList(
+                            normalizedValue
+                        )
+                    }${if (isList) ")" else ""}\n${getTabs(tabsCounter)}\n"
                 }
             }
 
             (!isComment && line.contains("->")) -> {
                 val items = line.split("->")
-                resultCode += "${getTabs(tabsCounter)}if (${items[0].trim()}) {\n${getTabs(tabsCounter + 1)}${items[1].trim()}\n${
+                resultCode += "${getTabs(tabsCounter)}if (${items[0].trim()}) {\n${
+                    getTabs(
+                        tabsCounter + 1
+                    )
+                }${items[1].trim()}\n${
                     getTabs(tabsCounter)
                 }}\n"
             }
@@ -173,14 +210,17 @@ fun translateToKotlin(source: String): String {
                     arguments.clear()
 
                     functionNames.add(name)
-                    resultCode = resultCode.replace("\$fun$${tabsCounter} ", "fun $name(${args.trim(' ', ',')}) ")
+                    resultCode = resultCode.replace(
+                        "\$fun$${tabsCounter} ",
+                        "fun $name(${args.trim(' ', ',')}) "
+                    )
                 }
                 tabsCounter -= 1
             }
 
             isComment -> resultCode += "$line\n"
             line == "" -> resultCode += "\n"
-            else  -> {
+            else -> {
                 var normalizedValue = translateFunctionCalls(line)
 
                 resultCode += "$normalizedValue\n"
