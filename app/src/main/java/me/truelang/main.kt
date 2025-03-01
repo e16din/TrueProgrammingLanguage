@@ -2,65 +2,24 @@ package me.truelang
 
 // NOTE: Основная идея: сначала что-то создаю, затем называю
 
-// Pseudo Code:
-
-// Primitives: Int, Long, String, Array, Fun, ParallelFun
-// {
-//    10 = pageSize
-//    20L = maxPages
-//    "Ok" = okText
-//    "Cancel" = cancelText
-//
-//    {
-//      empty = text : String
-//    } = Button
-//
-//    Button(okText) = okButton
-//    true = isVisible
-//    1, 2, 3 = ads
-//
-//    {
-//      empty = count : Int
-//      empty = fun : Fun
-//
-//      0 = i
-//      i < count -> fun()
-//    } = repeat
-//
-//    {
-//      empty = items : Array
-//      empty = fun : Fun
-//
-//      0 = i
-//      i < count -> fun(items[i])
-//    } = foreach
-//
-//    {
-//      empty = button : Button
-//      true = visible : Boolean
-//      true = result : Boolean
-//
-//      visible -> Platform.show(button)
-//    } = show
-//
-//    ads.size > 3 -> show(okButton, isVisible) = funcName
-//    Backend.getUser() : Parallel = getUserJob
-//    getUserJob.success -> repeat(3, println("${getUserJob.data}")) = logUser
-//    getUserJob.success == false -> wait(getUserJob.success).than(logUser)
-//    {...} = wait : ParallelFun
-//
-//    true -> foreach(ads, println(.it))
-//    "log" -> println(.it)
-// } = main, secondName
-
-//  = Язык программирования True :)
-
-// True потому что мы оперируем "истинными" сущностями,
-// и даем им название при необъодимости
-
 fun main() {
+
+    // keyword "$->" is input data provider
+    // keyword "$n" is argument data placeholder
+    // 'any code' = код на другом языке
     val code = """
-        // NOTE: сначала что-то создаю, затем называю
+        :start: import androidx.compose.material3.Button
+        :start: import androidx.compose.material3.Text
+        `Button(onClick = { it ->
+            $-> it 
+        }) {
+            Text($0)
+        }` = Button
+            
+        :start: 
+        :start: 
+        :start: // вставить строку в начало файла
+        :start: // NOTE: сначала что-то создаю, затем называю
         { 
             10 = pageSize
             20L = maxPages
@@ -69,17 +28,19 @@ fun main() {
             
             false -> main()
             //
-            
-            {
-              empty = text : String
-            } = Button
 
             Button(okText) = okButton
+            okButton()
+            
+            pageSize + maxPages + 1 = text
+            println(text)
+            
             true = isVisible
-            1, 2, 3 = ads
+            [1, 2, 3] = ads
             ads.size > 3 -> show(okButton, isVisible) = funcName
             
         } = main
+
     """.trimIndent()
 
 
@@ -90,97 +51,144 @@ fun main() {
     println(translateToKotlin(code))
 }
 
-// NOTE: переделать функции в классы чтобы иметь доступ к полям аргументов
-
-// NOTE: многопоточность: не одна функция не блокирует главный поток,
-// функции вызванные параллельно ставят результат в очередь
-// которая отработает после завершения тела основной функции,
-// если необходимо можно мониторить очередь и брать результат оттуда
-// по имени функции и ключу
-
-// NOTE: Язык высокоуровневый, как фассад над другим язком,
+// NOTE: Язык высокоуровневый, как фассад над другим языком,
 // под капотом может быть любая реализация с любыми подключенными фреймворками
 // не имеет смысла строить свою систему когда их и так куча,
 // это прежде всего инструмент для написания кода в уже существующей инфраструктуре
 
-fun translateToKotlin(code: String): String {
+fun translateToKotlin(source: String): String {
+    var code = source
+    if (!source.trim(' ', '\t').startsWith("{")) {
+//        code = "{\n$code\n}"
+    }
+
     val lines = code.split('\n')
-    var result = ""
-    var counter = 0
+    var resultCode = ""
+    var startLines = ""
+    var tabsCounter = 0
     val arguments = mutableListOf<String>()
+    var isAnotherCode = false
+    var anotherCode = ""
+    var functionNames = mutableListOf<String>()
+    fun translateFunctionCalls(value: String): String {
+        val items = value.split(Regex("[^a-zA-Z0-9\"']+"))
+        var normalizedValue = value
+
+        items.forEach { it ->
+            if (it.isNotBlank() && (!it[0].isDigit() && it != "true" && it != "false" && it[0] != '"')) {
+                normalizedValue = normalizedValue.replace(it, "$it()")
+                normalizedValue = normalizedValue.replace("()(", "(")
+            }
+        }
+        return normalizedValue
+    }
+
     lines.forEach {
         val isComment = isComment(it)
-        val s = if (isComment) it else it.replace(" ", "").replace("\t", "")
+        val line = if (isComment) it else it.replace("", "").replace("\t", "")
+        val startKeyword = ":start: "
         when {
-            !isComment && s == "{" -> {
-                counter += 1
-                result += "${getTabs(counter - 1)}$${counter} {\n"
+            !isComment && isAnotherCode -> {
+                if(line.contains("`")){
+                    val names = line.split("=")[1]
+                    val name = names.split(",")[0].trim()
+
+                    anotherCode += "${getTabs(tabsCounter)}${line.replaceAfter("`", "").dropLast(1)}\n"
+                    functionNames.add(name)
+                    resultCode += "fun $name() =\n$anotherCode\n"
+
+                    isAnotherCode = false
+                    anotherCode = ""
+                    tabsCounter -= 1
+                } else {
+                    anotherCode += "${getTabs(tabsCounter)}${line}\n"
+                }
+            }
+            !isComment && line.startsWith("`") -> {
+                tabsCounter += 1
+                isAnotherCode = true
+                anotherCode += "${getTabs(tabsCounter)}${line.replace("`", "")}\n"
             }
 
-            (!isComment && s.contains("=") && !s.startsWith("}") && !s.contains(":")) -> {
-                val items = s.split("=")
+            !isComment && line.startsWith(startKeyword) -> {
+                startLines += "${
+                    line.replaceFirst(
+                        startKeyword,
+                        ""
+                    )
+                }\n"
+            }
 
+            !isComment && line.trim() == "{" -> {
+                tabsCounter += 1
+                resultCode += "${getTabs(tabsCounter - 1)}\$fun$${tabsCounter} {\n"
+            }
+
+            (!isComment && line.contains("=") && !line.startsWith("}")) -> {
+                val items = line.split("=")
+
+                val name = items[1].trim()
+                functionNames.add(name)
                 if (items[0].contains("->")) {
                     val items2 = items[0].split("->")
-                    result += "${getTabs(counter)}fun ${items[1]}() {\n"
-                    result += "${getTabs(counter + 1)}if (${items2[0]}) {\n${getTabs(counter + 2)}${items2[1]}\n${
+                    resultCode += "${getTabs(tabsCounter)}fun $name() {\n"
+                    resultCode += "${getTabs(tabsCounter + 1)}if (${items2[0].trim()}) {\n${getTabs(tabsCounter + 2)}${items2[1].trim()}\n${
                         getTabs(
-                            counter + 1
+                            tabsCounter + 1
                         )
                     }}\n"
-                    result += "${getTabs(counter)}}\n"
+                    resultCode += "${getTabs(tabsCounter)}}\n"
                 } else {
 
-                    val isList = items[0].contains(',')
-                    result += "${getTabs(counter)}var ${items[1]} = ${if (isList) "mutableListOf(" else ""}${items[0]}${if (isList) ")" else ""}\n"
+                    fun unpackList(string: String) = string.replace("[", "").replace("]", "").trim()
+
+                    val isList = items[0].contains('[')
+                    val value = items[0].trim()
+
+                    var normalizedValue = translateFunctionCalls(value)
+
+                    resultCode += "${getTabs(tabsCounter)}fun $name() =\n${getTabs(tabsCounter+1)}${if (isList) "mutableListOf(" else ""}${unpackList(
+                        normalizedValue
+                    )}${if (isList) ")" else ""}\n${getTabs(tabsCounter)}\n"
                 }
             }
 
-            (!isComment && s.contains("->")) -> {
-                val items = s.split("->")
-                result += "${getTabs(counter)}if (${items[0]}) {\n${getTabs(counter + 1)}${items[1]}\n${
-                    getTabs(
-                        counter
-                    )
+            (!isComment && line.contains("->")) -> {
+                val items = line.split("->")
+                resultCode += "${getTabs(tabsCounter)}if (${items[0].trim()}) {\n${getTabs(tabsCounter + 1)}${items[1].trim()}\n${
+                    getTabs(tabsCounter)
                 }}\n"
             }
 
-            !isComment && s.startsWith("}") -> {
-                val names = s.split("=")[1]
-                val name = names.split(",")[0]
-                result += "${getTabs(counter - 1)}}\n"
+            !isComment && line.startsWith("}") -> {
+                if (line.length > 1) {
+                    val names = line.split("=")[1]
+                    val name = names.split(",")[0].trim()
+                    resultCode += "${getTabs(tabsCounter - 1)}}\n"
 
-                var args = ""
-                arguments.forEach {
-                    args += "$it, "
+                    var args = ""
+                    arguments.forEach {
+                        args += "$it, "
+                    }
+                    arguments.clear()
+
+                    functionNames.add(name)
+                    resultCode = resultCode.replace("\$fun$${tabsCounter} ", "fun $name(${args.trim(' ', ',')}) ")
                 }
-                arguments.clear()
-
-                result = result.replace("$${counter} ", "fun $name(${args.trim(' ', ',')}) ")
-                counter -= 1
+                tabsCounter -= 1
             }
 
-            !isComment && s.contains(":") -> {
-                val argItems = s.split(":")
-                val argType = argItems[1]
+            isComment -> resultCode += "$line\n"
+            line == "" -> resultCode += "\n"
+            else  -> {
+                var normalizedValue = translateFunctionCalls(line)
 
-                val items = argItems[0].split("=")
-                val isList = items[0].contains(',')
-                val isEmpty = items[0] == "empty"
-                val arg = if (isEmpty)
-                    "${items[1]}: ${argType}"
-                else
-                    "${items[1]}: ${argType} = ${if (isList) "mutableListOf(" else ""}${items[0]}${if (isList) ")" else ""}"
-
-
-                arguments.add(arg)
+                resultCode += "$normalizedValue\n"
             }
-
-            isComment -> result += "$s\n"
-            s == "" -> result += "\n"
         }
     }
-    return result
+
+    return startLines + resultCode
 }
 
 fun getTabs(count: Int): String {
@@ -196,3 +204,5 @@ infix fun Int.multiply(string: String): String {
 }
 
 fun isComment(s: String): Boolean = s.trim().startsWith("//")
+
+//  = Функциональный Язык программирования True :)
