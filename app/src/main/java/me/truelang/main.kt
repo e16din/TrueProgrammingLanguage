@@ -8,38 +8,90 @@ fun main() {
     // keyword "$n" is argument data placeholder
     // 'any code' = код на другом языке
     val code = """
-        :start: import androidx.compose.material3.Button
-        :start: import androidx.compose.material3.Text
-        `Button(onClick = {
-            |onClick()| : () -> Unit|
-        }) {
-            Text(|text| : String|)
-        }` = Button
+        {} = emptyFunction
+        
+        {
+            $1 = arg
             
+        } = funcWithArg
+        
+        {
+            $1 = arg1
+            $2 = arg2
             
-        :start: 
-        :start: 
-        :start: // вставить строку в начало файла
-        :start: // NOTE: сначала что-то создаю, затем называю
+        } = funcWithArgs
+        
+        // NOTE: сначала что-то создаю, затем называю
         { 
             10 = pageSize
             20L = maxPages
             "Ok" = okText
             "Cancel" = cancelText
-            
-            false -> main()
-            //
-
-            Button(okText) = okButton
-            okButton()
-            
-            pageSize + maxPages + 1 = text
-            println(text)
-            
-            true = isVisible
             [1, 2, 3] = ads
-            ads.size > 3 -> show(okButton, isVisible) = funcName
+            true = isVisible
             
+//            // callbacks/lambdas
+//            () { println("click") } = onClick
+//            () { 
+//                $1 = value
+//                println("onValueChange: $|value") 
+//            } = textFieldInput
+//            () { 
+//                $1 = arg1
+//                $2 = arg2
+//                
+//                println("arg: $|arg1, $|arg2") 
+//            } = anyLambda
+            
+            `Button(onClick, { Text(okText) })` = okButton
+            :start: // вставить строку в начало файла
+            :start: import androidx.compose.material3.Button
+            :start: import androidx.compose.material3.Text
+            
+//             // список автоматически форечится
+//            ads -> println(it)
+//            
+//            // условие автоматически ифится
+//            ads.size > 3 -> println("size > 3")
+//
+//            isVisible -> {
+//                okButton()
+//            }
+//            
+//            false -> main()
+//            // comment
+//            
+//            1 = one
+//            one + one = sum
+//            println(sum)
+//            
+//            // можно назвать действие
+//            ads.size > 3 -> println("size > 3") = anyFuncName1
+//            ads.size > 0 -> ads.size < 10 -> ads -> println($) = anyFuncName2
+//            anyFuncName1()
+//            println("=========")
+//            anyFuncName2()
+//            
+//           
+//            `TextField(value = textFieldInput, onValueChange = { it -> 
+//                textFieldInput(it)
+//            })`
+//           
+//           
+//           // arguments of multiply
+//            {
+//                1 = a
+//                1 = b
+//                
+//                a * b = result
+//                
+//                println(result)
+//                result
+//                
+//            } = multiply
+//            
+//            multiply(3, 4)
+
         } = main
 
     """.trimIndent()
@@ -49,13 +101,58 @@ fun main() {
     println(code)
 
     println("\nТранслируем ее в Kotlin:\n")
-    println(translateToKotlin(code))
+    val code1 = """
+        // code1 ======================
+        
+        {} = emptyFunction
+        
+        {
+            $1 = arg
+            
+            <- arg
+        } = funcWithArg
+        
+        {
+            $1 = arg1
+            $2 = arg2
+            
+            <- arg1 + arg2
+        } = funcWithArgs
+        
+        {
+            emptyFunction()
+            
+            funcWithArg("Test") = testResult
+            funcWithArg("Test2") = testResult2
+            
+            // fun arg() = "Test"
+            // fun arg() { 
+            //   <- "Test" 
+            // }
+            // fun testResult() {
+                  
+            //   println(resultsStack.pop())
+            // }
+            
+            testResult2()
+            // resultsStack.pop()
+            
+            println(testResult())
+            // println(resultsStack.pop())
+            
+            funcWithArgs(1, 2)
+        } = main
+        
+        
+    """.trimIndent()
+    println(translateToKotlin2(code1))
 }
 
 // NOTE: Язык высокоуровневый, как фассад над другим языком,
 // под капотом может быть любая реализация с любыми подключенными фреймворками
 // не имеет смысла строить свою систему когда их и так куча,
 // это прежде всего инструмент для написания кода в уже существующей инфраструктуре
+
 
 fun translateToKotlin(source: String): String {
     var code = source
@@ -87,8 +184,17 @@ fun translateToKotlin(source: String): String {
     lines.forEach {
         val isComment = isComment(it)
         val line = if (isComment) it else it.replace("", "").replace("\t", "")
-        val startKeyword = ":start: "
+        val startKeyword = ":start:"
         when {
+            !isComment && line.trim().startsWith(startKeyword) -> {
+                startLines = "${
+                    line.replaceFirst(
+                        startKeyword,
+                        ""
+                    ).trim()
+                }\n$startLines"
+            }
+
             !isComment && isAnotherCode -> {
                 if (line.contains("`")) {
                     val names = line.split("=")[1]
@@ -111,8 +217,8 @@ fun translateToKotlin(source: String): String {
                         if (bracketIndexStart != -1) {
                             val bracketIndexEnd = argName.indexOf(")")
                             clearedArgName =
-                                argName.replaceRange(bracketIndexStart, bracketIndexEnd+1, "")
-                        }else {
+                                argName.replaceRange(bracketIndexStart, bracketIndexEnd + 1, "")
+                        } else {
                             clearedArgName = argName
                         }
                         args += "$clearedArgName$argType, "
@@ -135,15 +241,6 @@ fun translateToKotlin(source: String): String {
                 tabsCounter += 1
                 isAnotherCode = true
                 anotherCode += "${getTabs(tabsCounter)}${line.replace("`", "")}\n"
-            }
-
-            !isComment && line.startsWith(startKeyword) -> {
-                startLines += "${
-                    line.replaceFirst(
-                        startKeyword,
-                        ""
-                    )
-                }\n"
             }
 
             !isComment && line.trim() == "{" -> {
