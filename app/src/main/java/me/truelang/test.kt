@@ -22,13 +22,45 @@ import kotlin.math.min
 
 
 fun main() {
-    /*
-    * {
-                $1
-                "Test$1" println
+    println(1 * 2)
+    println(2 * 2)
+    println(3 * 2)
+    println(3 * 3 + 6)
+    println(2 + 2)
+    println("Text")
+    1 + 24
 
-            } = testPrint
-            * */
+    var example2 = """
+        $ = foreach
+        
+        [1,2,3,4,5,6,7,b,c,"text",true] foreach println
+        
+        {
+           2
+           18
+           add
+           println
+           
+           {
+                { "Hello World" println }
+                "Click Me"
+                `Button(onClick = {
+                    $
+                }) {
+                    Text($)
+                }`
+                
+           } = calc
+           
+           1+6+ 9 * 2 
+           "Test${'$'}" println
+
+        } = blockFun
+        
+        blockFun
+        
+        """.trimIndent()
+
     var example1 = """
         $ * $ = multiply
         println($) = println
@@ -46,15 +78,20 @@ fun main() {
         3 2 multiply
         println
 
-        3,3 multiply
+        3,4 multiply
         6 add 
         println
         
-        2+2 println
+        2+3 println
         
         "Text" println
         
         1,24 add
+        
+        10 add 20
+        
+        10 multiply 5
+
 """.trimIndent()
 
     fun String.indexOf(char: Char, startIndex: Int = 0): Int {
@@ -80,14 +117,6 @@ fun main() {
 
         return -1
     }
-
-//    10 = pageSize
-//    20L = maxPages
-//    "Ok" = okText
-//    "Cancel" = cancelText
-//    [1, 2, 3] = ads
-//    true = isVisible
-
 
     fun fillTemplates(): MutableMap<String, String> {
         var templatesMap = mutableMapOf<String, String>() // name, body
@@ -134,49 +163,76 @@ fun main() {
     }
 
     val atoms = fillAtoms()
-//    atoms.forEach {
-//        println(it)
-//    }
 
+    val endOfChainStr = ""
+    fun translatedCodeBlock(): String {
+        var codeBlock = ""
+        val dataItems = mutableListOf<String>()
+        var nextAtomsGets = 0
+        for (i in atoms.indices) {
+            if (nextAtomsGets > 0) {
+                nextAtomsGets -= 1
+                continue
+            }
+            val atom = atoms[i].trim()
+            if (atom == endOfChainStr) {
+                if (dataItems.isNotEmpty()) {
+                    codeBlock += "${dataItems.last()}\n"
+                    dataItems.clear()
+                }
+            }
 
-    var codeBlock = ""
-    val dataItems = mutableListOf<String>()
-    atoms.forEach {
-        val atom = it.trim()
-        if (atom.isEmpty()) {
-            if (dataItems.isNotEmpty()) {
-                codeBlock += "${dataItems.last()}\n"
-                dataItems.clear()
+            if (!templatesMap.contains(atom)) {
+                if (!atom.isEmpty() && !atom.startsWith("//")) {
+                    dataItems.add(atom)
+                }
+
+            } else {
+                val template = templatesMap[atom]
+                var newData = "$template"
+                var index = newData.indexOf('$')
+                val totalCount = newData.count { it == '$' }
+    //            println("totalCount: $totalCount")
+    //            println(dataItems)
+                var counter = 1
+                while (index != -1) {
+
+                    val dataIndex = dataItems.size - 1 - (totalCount - counter)
+                    if (dataIndex >= 0) {
+                        newData = newData.replaceRange(
+                            index,
+                            index + 1,
+                            dataItems[dataIndex].trim()
+                        )
+                    } else {
+                        val nextAtom = atoms[i + 1].trim()
+                        nextAtomsGets += 1
+                        //dataItems.add(nextAtom)
+                        newData = newData.replaceRange(
+                            index,
+                            index + 1,
+                            nextAtom.trim()
+                        )
+                    }
+                    index = newData.indexOf('$', startIndex = index + 1)
+                    counter += 1
+                }
+    //            if(totalCount >= dataItems.size) {
+                println("newData: $newData")
+                dataItems.add(newData)
+    //            }
             }
         }
-
-        if (!templatesMap.contains(atom)) {
-            if (!atom.isEmpty() && !atom.startsWith("//")) {
-                dataItems.add(atom)
-            }
-
-        } else {
-            val template = templatesMap[atom]
-            var newData = "$template"
-            var index = newData.indexOf('$')
-            val totalCount = newData.count { it == '$' }
-//            println("totalCount: $totalCount")
-//            println(dataItems)
-            var counter = 1
-            while (index != -1) {
-                newData = newData.replaceRange(
-                    index,
-                    index + 1,
-                    dataItems[dataItems.size - 1 - (totalCount - counter)].trim()
-                )
-                index = newData.indexOf('$', startIndex = index + 1)
-                counter += 1
-            }
-//            println("newData: $newData")
-            dataItems.add(newData)
+        if (dataItems.isNotEmpty()) {
+            codeBlock += "${dataItems.last()}\n"
         }
+        return codeBlock
     }
-    codeBlock += "${dataItems.last()}\n"
+
+    var codeBlock = translatedCodeBlock()
+
+    // make an interpretator with an output like this
+    // 1, 2 multiply println | println(1 * 2) | 2
 
     println(codeBlock)
 
