@@ -1,6 +1,6 @@
 package me.truelang.lang
 
-import me.truelang.AtomItem
+import me.truelang.DharmaItem
 import me.truelang.indexOf
 import me.truelang.indexOfInverse
 import kotlin.math.max
@@ -192,6 +192,10 @@ fun interpretCode(transformation: String, result: String): String {
 }
 
 var transformationsSource = """
+        | = |
+        $ = $
+        -> = ->
+        
         |:a * $:b = multiply
         
         println(|) = print
@@ -233,18 +237,18 @@ fun fillTransformations(): MutableMap<String, String> {
 }
 
 val transformationsMap = fillTransformations()
-fun transformAtomsChain(atomItems: List<AtomItem>): String {
+fun transformAtomsChain(dharmaItems: List<DharmaItem>): String {
     val endOfChainStr = ""
 
     var codeBlock = ""
     val dataItems = mutableListOf<String>()
     var nextAtomsGets = 0
-    for (i in atomItems.indices) {
+    for (i in dharmaItems.indices) {
         if (nextAtomsGets > 0) {
             nextAtomsGets -= 1
             continue
         }
-        val atom = atomItems[i].data.trim()
+        val atom = dharmaItems[i].dharma.body.trim()
         if (atom == endOfChainStr) {
             if (dataItems.isNotEmpty()) {
                 codeBlock += "${dataItems.last()}\n"
@@ -274,7 +278,7 @@ fun transformAtomsChain(atomItems: List<AtomItem>): String {
                         dataItems[dataIndex].trim()
                     )
                 } else {
-                    val nextAtom = atomItems[i + 1].data.trim()
+                    val nextAtom = dharmaItems[i + 1].dharma.body.trim()
                     nextAtomsGets += 1
                     //dataItems.add(nextAtom)
                     newData = newData.replaceRange(

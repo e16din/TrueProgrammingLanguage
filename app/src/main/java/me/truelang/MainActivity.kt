@@ -4,7 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,8 +56,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TrueProgrammingLanguageTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
+                    Main(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -64,20 +65,24 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-data class AtomItem(val data: String, var color: Color = Color.White)
-data class TransformationItem(val id: Int, val value: String, val isInited: Boolean)
+data class DharmaItem(var id: Int, val dharma: Dharma, var color: Color = Color.White)
+data class Dharma(var name: String, var body: String)
 
-val emptyAtomItem = AtomItem("       ")
+val emptyDharma = Dharma("", "")
+val emptyDharmaItem = DharmaItem(-1, emptyDharma)
+
+// TODO: подсвечивать функции с необходимым кол-вом аргументов, остальные дизэйблить
+// TODO: Брать предыдущий атом если | и следующий если $
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
+fun Main(modifier: Modifier = Modifier) {
     var input by remember { mutableStateOf("") }
-    val atomItems = remember {
-        mutableStateListOf<AtomItem>().apply {
-            add(AtomItem("10"))
-            add(AtomItem("20"))
-            add(AtomItem("multiply"))
-            add(AtomItem("print"))
+    val dharmaChain = remember {
+        mutableStateListOf<DharmaItem>().apply {
+            add(DharmaItem(size, Dharma("10", "")))
+            add(DharmaItem(size, Dharma("20", "")))
+            add(DharmaItem(size, Dharma("multiply", "")))
+            add(DharmaItem(size, Dharma("print", "")))
 // todo
 //            add("Column")
 //            add("Spacer")
@@ -88,131 +93,200 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 
         }
     }
-    val transformationItems = remember {
-        transformationsMap.keys.mapIndexed { index, it ->
-            TransformationItem(id = index, value = it, isInited = true)
+    val dharmaTemplates = remember {
+        transformationsMap.keys.mapIndexed { index, key ->
+            DharmaItem(id = index, dharma = Dharma(key, transformationsMap[key] ?: ""))
         }.toMutableStateList()
     }
 
-    var inputAtomModeEnabled by remember { mutableStateOf(false) }
+    var selectedDharmaItem by remember { mutableStateOf<DharmaItem?>(null) }
+    var selectedDharmaItemIndex by remember { mutableIntStateOf(0) }
 
     Surface(
-        Modifier
+        modifier
             .fillMaxSize()
             .systemBarsPadding()
     ) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.weight(1f)) {
+                    items(dharmaChain.size, key = { i -> dharmaChain[i].id }) { i ->
+                        val dharmaItem = dharmaChain[i]
+                        Row(
+                            Modifier
+                                .background(dharmaItem.color)
+                                .clickable {
+                                    selectedDharmaItem = dharmaItem
+                                    selectedDharmaItemIndex = i
+                                }) {
+                            Text(
+                                text = dharmaItem.dharma.name + " = " + dharmaItem.dharma.body,
+                                modifier = Modifier.weight(1f)
+                            )
 
-        Box {
-            LazyColumn {
-                items(atomItems.size, key = { i -> atomItems[i].data + atomItems[i].color }) { i ->
-                    val atom = atomItems[i]
-                    Row(Modifier.background(atom.color)) {
-                        Text(text = atom.data, modifier = Modifier.weight(1f))
-                        if (atom.data.isNotEmpty()) {
-                            Button(onClick = {
-                                atomItems.removeAt(i)
-                            }) {
-                                Icon(Icons.Default.Close, "Remove")
+                            if (dharmaItem.dharma.body.trim().isNotEmpty()) {
+                                Button(onClick = {
+                                    dharmaChain.removeAt(i)
+                                }) {
+                                    Icon(Icons.Default.Close, "Remove")
+                                }
                             }
                         }
                     }
-                }
 
-                item {
-                    Column(modifier = Modifier.background(Color.Gray)) {
-                        val index = max(0, atomItems.lastIndexOf(emptyAtomItem))
-                        var code = ""
-                        var atomsLastChain = mutableListOf<AtomItem>()
-                        try {
-                            atomsLastChain = atomItems.subList(index, atomItems.size)
-                            code = transformAtomsChain(atomsLastChain)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        Text("Kotlin: $code")
+                    item {
+                        Column(modifier = Modifier.background(Color.Gray)) {
+                            val index = max(0, dharmaChain.lastIndexOf(emptyDharmaItem))
+                            var code = ""
+                            var dharmasLastChain = mutableListOf<DharmaItem>()
+                            try {
+                                dharmasLastChain = dharmaChain.subList(index, dharmaChain.size)
+                                code = transformAtomsChain(dharmasLastChain)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                            Text("Kotlin: $code")
 
-                        var console = ""
-                        try {
-                            console = interpretCode(
-                                result = transformAtomsChain(atomsLastChain),
-                                transformation = atomsLastChain[atomsLastChain.size - 1].data
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+                            var console = ""
+                            try {
+                                console = interpretCode(
+                                    result = transformAtomsChain(dharmasLastChain),
+                                    transformation = dharmasLastChain[dharmasLastChain.size - 1].dharma.body
+                                )
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                            Text("Console: $console")
                         }
-                        Text("Console: $console")
                     }
-                }
 
-                item {
-                    Row {
-                        TextField(value = input, onValueChange = {
-                            input = it
-                        }, modifier = Modifier.weight(1f))
-                        Button(onClick = {
-                            if (input.isEmpty()) {
-                                atomItems.add(emptyAtomItem)
-                            } else {
-                                atomItems.add(AtomItem(input, Color.White))
-                                if (!transformationItems.any { it.value == input }) {
-                                    transformationItems.add(
-                                        TransformationItem(
-                                            id = transformationItems.size,
-                                            value = input,
-                                            isInited = false
+                    item {
+                        Row {
+                            TextField(value = input, onValueChange = {
+                                input = it
+                            }, modifier = Modifier.weight(1f))
+                            Button(onClick = {
+                                if (input.isEmpty()) {
+                                    dharmaChain.add(emptyDharmaItem)
+                                } else {
+                                    val parts = input.split("=")
+                                    val body = parts[0]
+                                    val name = if (parts.size > 1) parts[1] else ""
+                                    val dharma = Dharma(body, name)
+                                    dharmaChain.add(
+                                        DharmaItem(
+                                            dharmaChain.size,
+                                            dharma,
+                                            Color.White
                                         )
                                     )
+                                    if (!dharmaTemplates.any { it.dharma.name == input }) {
+                                        dharmaTemplates.add(
+                                            DharmaItem(
+                                                id = dharmaTemplates.size,
+                                                dharma = Dharma(
+                                                    name = "",
+                                                    body = input
+                                                )
+                                            )
+                                        )
+                                    }
+                                    input = ""
                                 }
-                                input = ""
-                            }
-                            inputAtomModeEnabled = false
 
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.Send, "Post")
+                            }
+                        }
+                    }
+
+                    item {
+                        LazyHorizontalStaggeredGrid(
+                            modifier = Modifier.height(120.dp),
+                            rows = StaggeredGridCells.Adaptive(32.dp),
+                            horizontalItemSpacing = 4.dp,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            content = {
+                                items(dharmaTemplates, key = {
+                                    it.id
+                                }) { it ->
+                                    val containerColor =
+                                        if (it.dharma.body.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inversePrimary
+                                    Button(
+                                        colors = ButtonDefaults.buttonColors()
+                                            .copy(containerColor = containerColor),
+                                        onClick = {
+                                            println("here! $it")
+                                            if (it.dharma.body.isNotEmpty()) {
+                                                // TODO: color
+//                                            val argsCount = it.name.count { it == '$' }
+//
+//                                            repeat(argsCount) {
+//                                                dharmaChain[dharmaChain.size - 1 - it - 1].color =
+//                                                    Color.Yellow
+//                                            }
+                                            }
+
+                                            dharmaChain.add(DharmaItem(dharmaChain.size, it.dharma))
+
+                                        }) {
+                                        Text(it.dharma.name)
+                                    }
+                                }
+                            }
+                        )
+                    }
+
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                    }
+                }
+            }
+
+            AnimatedVisibility(selectedDharmaItem != null) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        var bodyValue by remember {
+                            mutableStateOf(
+                                selectedDharmaItem?.dharma?.body ?: ""
+                            )
+                        }
+                        Row {
+                            TextField(
+                                value = bodyValue,
+                                label = { Text("Body") },
+                                onValueChange = {
+                                    bodyValue = it
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        var nameValue by remember {
+                            mutableStateOf(
+                                selectedDharmaItem?.dharma?.name ?: ""
+                            )
+                        }
+                        Row {
+                            TextField(
+                                value = nameValue,
+                                label = { Text("Name") },
+                                onValueChange = {
+                                    nameValue = it
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Button({
+                            dharmaChain[selectedDharmaItemIndex] = selectedDharmaItem!!.copy(
+                                dharma = Dharma(nameValue, bodyValue),
+                                id = selectedDharmaItem?.id!! * 10,
+                            )
+                            selectedDharmaItem = null
                         }) {
-                            Icon(Icons.AutoMirrored.Filled.Send, "Post")
+                            Text("Save")
                         }
                     }
                 }
-
-                item() {
-                    LazyHorizontalStaggeredGrid(
-                        modifier = Modifier.height(120.dp),
-                        rows = StaggeredGridCells.Adaptive(32.dp),
-                        horizontalItemSpacing = 4.dp,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        content = {
-                            items(transformationItems, key = {
-                                it.id
-                            }) { it ->
-                                val containerColor =
-                                    if (it.isInited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inversePrimary
-                                Button(
-                                    colors = ButtonDefaults.buttonColors()
-                                        .copy(containerColor = containerColor),
-                                    onClick = {
-                                        println("here! $it")
-                                        if (it.isInited) {
-                                            val argsCount = it.value.count { it == '$' }
-
-                                            repeat(argsCount) {
-                                                atomItems[atomItems.size - 1 - it - 1].color =
-                                                    Color.Yellow
-                                            }
-                                        }
-
-                                        atomItems.add(AtomItem(it.value))
-
-                                    }) {
-                                    Text(it.value)
-                                }
-                            }
-                        }
-                    )
-                }
-
-                item {
-                    Spacer(Modifier.height(24.dp))
-                }
-
             }
         }
     }
@@ -222,7 +296,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Composable
 fun GreetingPreview() {
     TrueProgrammingLanguageTheme {
-        Greeting("Android")
+        Main()
     }
 }
 
