@@ -2,6 +2,7 @@ package me.truelang
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -244,6 +245,10 @@ fun Main(modifier: Modifier = Modifier) {
             }
 
             AnimatedVisibility(selectedDharmaItem != null) {
+                BackHandler {
+                    selectedDharmaItem = null
+                }
+
                 Surface(Modifier.fillMaxSize()) {
                     Column {
                         var bodyValue by remember {
