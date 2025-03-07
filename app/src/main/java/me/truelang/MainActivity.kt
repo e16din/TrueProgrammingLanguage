@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,9 +47,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.truelang.lang.interpretCode
 import me.truelang.lang.transformAtomsChain
-import me.truelang.lang.transformationsMap
+import me.truelang.lang.dharmasMap
 import me.truelang.ui.theme.TrueProgrammingLanguageTheme
-import kotlin.math.max
+import kotlin.reflect.KClass
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,7 +58,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TrueProgrammingLanguageTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Main(
+                    MainScreenView(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -66,24 +67,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-data class DharmaItem(var id: Int, val dharma: Dharma, var color: Color = Color.White)
-data class Dharma(var name: String, var body: String)
 
-val emptyDharma = Dharma("", "")
-val emptyDharmaItem = DharmaItem(-1, emptyDharma)
+data class TemplateItem(var id: Int, val dharma: EditorItem.Dharma)
+
+sealed class EditorItem(open val id: Int) {
+    data class Dharma( // Transformation, Presenter, Map, Function, Producer, Action, Operation
+        override val id: Int,
+        var name: String,
+        var template: String,
+        var color: Color = Color.White
+    ) : EditorItem(id)
+
+    data class EndOfChain(
+        override val id: Int,
+    ) : EditorItem(id)
+
+    data class Message(
+        override val id: Int,
+        var text: String,
+    ) : EditorItem(id)
+}
+
 
 // TODO: подсвечивать функции с необходимым кол-вом аргументов, остальные дизэйблить
 // TODO: Брать предыдущий атом если | и следующий если $
 
 @Composable
-fun Main(modifier: Modifier = Modifier) {
+fun MainScreenView(modifier: Modifier = Modifier) {
     var input by remember { mutableStateOf("") }
-    val dharmaChain = remember {
-        mutableStateListOf<DharmaItem>().apply {
-            add(DharmaItem(size, Dharma("10", "")))
-            add(DharmaItem(size, Dharma("20", "")))
-            add(DharmaItem(size, Dharma("multiply", "")))
-            add(DharmaItem(size, Dharma("print", "")))
+    val dharmaChains = remember {
+        mutableStateListOf<EditorItem>().apply {
+            add(EditorItem.Message(size, "Let's start!"))
+            add(EditorItem.Dharma(size, "10", ""))
+            add(EditorItem.Dharma(size, "10", ""))
+            add(EditorItem.Dharma(size, "20", ""))
+            add(EditorItem.Dharma(size, "multiply", ""))
+            add(EditorItem.Dharma(size, "print", ""))
+            add(EditorItem.EndOfChain(size))
 // todo
 //            add("Column")
 //            add("Spacer")
@@ -95,13 +115,17 @@ fun Main(modifier: Modifier = Modifier) {
         }
     }
     val dharmaTemplates = remember {
-        transformationsMap.keys.mapIndexed { index, key ->
-            DharmaItem(id = index, dharma = Dharma(key, transformationsMap[key] ?: ""))
+        dharmasMap.keys.mapIndexed { index, key ->
+            TemplateItem(
+                id = index,
+                dharma = EditorItem.Dharma(id = -1, name = key, template = dharmasMap[key] ?: "")
+            )
+
         }.toMutableStateList()
     }
 
-    var selectedDharmaItem by remember { mutableStateOf<DharmaItem?>(null) }
-    var selectedDharmaItemIndex by remember { mutableIntStateOf(0) }
+    var selectedDharmaItem by remember { mutableStateOf<EditorItem.Dharma?>(null) }
+    var selectedItemIndex by remember { mutableIntStateOf(0) }
 
     Surface(
         modifier
@@ -109,138 +133,87 @@ fun Main(modifier: Modifier = Modifier) {
             .systemBarsPadding()
     ) {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize()) {
-                LazyColumn(Modifier.weight(1f)) {
-                    items(dharmaChain.size, key = { i -> dharmaChain[i].id }) { i ->
-                        val dharmaItem = dharmaChain[i]
-                        Row(
-                            Modifier
-                                .background(dharmaItem.color)
-                                .clickable {
-                                    selectedDharmaItem = dharmaItem
-                                    selectedDharmaItemIndex = i
-                                }) {
-                            Text(
-                                text = dharmaItem.dharma.name + " = " + dharmaItem.dharma.body,
-                                modifier = Modifier.weight(1f)
+            LazyColumn {
+                items(dharmaChains.size, key = { i -> dharmaChains[i].id }) { i ->
+                    val dharma = dharmaChains[i]
+                    when (dharma) {
+                        is EditorItem.Dharma -> {
+                            DharmaItemView(
+                                dharma,
+                                i,
+                                dharmaChains,
+                                onItemSelected = {
+                                    selectedDharmaItem = dharma
+                                    selectedItemIndex = i
+                                }
                             )
+                        }
 
-                            if (dharmaItem.dharma.body.trim().isNotEmpty()) {
-                                Button(onClick = {
-                                    dharmaChain.removeAt(i)
-                                }) {
-                                    Icon(Icons.Default.Close, "Remove")
-                                }
+                        is EditorItem.EndOfChain -> {
+                            Row {
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    text = "Name",
+                                    modifier = Modifier
+                                        .padding(8.dp)
+                                        .clickable {
+                                            println("Add Name")
+                                        })
+                            }
+                        }
+
+                        is EditorItem.Message -> {
+                            Row {
+                                Spacer(Modifier.weight(1f))
+                                Text("Name")
                             }
                         }
                     }
+                }
 
-                    item {
-                        Column(modifier = Modifier.background(Color.Gray)) {
-                            val index = max(0, dharmaChain.lastIndexOf(emptyDharmaItem))
-                            var code = ""
-                            var dharmasLastChain = mutableListOf<DharmaItem>()
-                            try {
-                                dharmasLastChain = dharmaChain.subList(index, dharmaChain.size)
-                                code = transformAtomsChain(dharmasLastChain)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                            Text("Kotlin: $code")
+                item {
+                    ConsoleView(dharmaChains)
+                }
 
-                            var console = ""
-                            try {
-                                console = interpretCode(
-                                    result = transformAtomsChain(dharmasLastChain),
-                                    transformation = dharmasLastChain[dharmasLastChain.size - 1].dharma.body
+                item {
+                    Row {
+                        TextField(value = input, onValueChange = {
+                            input = it
+                        }, modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                            if (input.isEmpty()) {
+                                dharmaChains.add(EditorItem.EndOfChain(dharmaChains.size))
+
+                            } else {
+                                val parts = input.split("=")
+                                val template = parts[0]
+                                val name = if (parts.size > 1) parts[1] else ""
+                                val dharma = EditorItem.Dharma(
+                                    id = dharmaChains.size,
+                                    name = name,
+                                    template = template
                                 )
-                            } catch (e: Exception) {
-                                e.printStackTrace()
+                                dharmaChains.add(dharma)
+
+                                input = ""
                             }
-                            Text("Console: $console")
+
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.Send, "Post")
                         }
                     }
+                }
 
-                    item {
-                        Row {
-                            TextField(value = input, onValueChange = {
-                                input = it
-                            }, modifier = Modifier.weight(1f))
-                            Button(onClick = {
-                                if (input.isEmpty()) {
-                                    dharmaChain.add(emptyDharmaItem)
-                                } else {
-                                    val parts = input.split("=")
-                                    val body = parts[0]
-                                    val name = if (parts.size > 1) parts[1] else ""
-                                    val dharma = Dharma(body, name)
-                                    dharmaChain.add(
-                                        DharmaItem(
-                                            dharmaChain.size,
-                                            dharma,
-                                            Color.White
-                                        )
-                                    )
-                                    if (!dharmaTemplates.any { it.dharma.name == input }) {
-                                        dharmaTemplates.add(
-                                            DharmaItem(
-                                                id = dharmaTemplates.size,
-                                                dharma = Dharma(
-                                                    name = "",
-                                                    body = input
-                                                )
-                                            )
-                                        )
-                                    }
-                                    input = ""
-                                }
-
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.Send, "Post")
-                            }
-                        }
-                    }
-
-                    item {
-                        LazyHorizontalStaggeredGrid(
-                            modifier = Modifier.height(120.dp),
-                            rows = StaggeredGridCells.Adaptive(32.dp),
-                            horizontalItemSpacing = 4.dp,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            content = {
-                                items(dharmaTemplates, key = {
-                                    it.id
-                                }) { it ->
-                                    val containerColor =
-                                        if (it.dharma.body.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inversePrimary
-                                    Button(
-                                        colors = ButtonDefaults.buttonColors()
-                                            .copy(containerColor = containerColor),
-                                        onClick = {
-                                            println("here! $it")
-                                            if (it.dharma.body.isNotEmpty()) {
-                                                // TODO: color
-//                                            val argsCount = it.name.count { it == '$' }
-//
-//                                            repeat(argsCount) {
-//                                                dharmaChain[dharmaChain.size - 1 - it - 1].color =
-//                                                    Color.Yellow
-//                                            }
-                                            }
-
-                                            dharmaChain.add(DharmaItem(dharmaChain.size, it.dharma))
-
-                                        }) {
-                                        Text(it.dharma.name)
-                                    }
-                                }
-                            }
+                item {
+                    TemplatesView(dharmaTemplates, onTemplateClick = {
+                        dharmaChains.add(
+                            it.dharma.copy(dharmaChains.size)
                         )
-                    }
+                    })
+                }
 
-                    item {
-                        Spacer(Modifier.height(24.dp))
-                    }
+                item {
+                    Spacer(Modifier.height(24.dp))
                 }
             }
 
@@ -248,60 +221,239 @@ fun Main(modifier: Modifier = Modifier) {
                 BackHandler {
                     selectedDharmaItem = null
                 }
-
-                Surface(Modifier.fillMaxSize()) {
-                    Column {
-                        var bodyValue by remember {
-                            mutableStateOf(
-                                selectedDharmaItem?.dharma?.body ?: ""
-                            )
-                        }
-                        Row {
-                            TextField(
-                                value = bodyValue,
-                                label = { Text("Body") },
-                                onValueChange = {
-                                    bodyValue = it
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        var nameValue by remember {
-                            mutableStateOf(
-                                selectedDharmaItem?.dharma?.name ?: ""
-                            )
-                        }
-                        Row {
-                            TextField(
-                                value = nameValue,
-                                label = { Text("Name") },
-                                onValueChange = {
-                                    nameValue = it
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        Button({
-                            dharmaChain[selectedDharmaItemIndex] = selectedDharmaItem!!.copy(
-                                dharma = Dharma(nameValue, bodyValue),
-                                id = selectedDharmaItem?.id!! * 10,
-                            )
-                            selectedDharmaItem = null
-                        }) {
-                            Text("Save")
-                        }
-                    }
-                }
+                TemplateEditorView(selectedDharmaItem, onSaveClick = { name, template ->
+                    dharmaChains[selectedItemIndex] = selectedDharmaItem!!.copy(
+                        name = name,
+                        template = template,
+                        id = selectedDharmaItem?.id!! * 10,
+                    )
+                    selectedDharmaItem = null
+                })
             }
         }
     }
+}
+
+@Composable
+fun DharmaItemView(
+    dharma: EditorItem.Dharma,
+    i: Int,
+    dharmaChain: SnapshotStateList<EditorItem>,
+    onItemSelected: (EditorItem) -> Unit
+) {
+
+    Row(
+        Modifier
+            .background(dharma.color)
+            .clickable {
+                onItemSelected(dharma)
+            }) {
+        Text(
+            text = dharma.name + " = " + dharma.template,
+            modifier = Modifier.weight(1f)
+        )
+
+        if (dharma.template.trim().isNotEmpty()) {
+            Button(onClick = {
+                dharmaChain.removeAt(i)
+            }) {
+                Icon(Icons.Default.Close, "Remove")
+            }
+        }
+    }
+}
+
+class MathList<OTHER, SELECTED> {
+    val other = mutableListOf<OTHER>()
+    val selected = mutableListOf<SELECTED>()
+}
+
+fun <T> MutableList<T>.minus(count: Int, fromEnd: Boolean = false): MathList<T, T> {
+    return MathList<T, T>().apply {
+        if (fromEnd) {
+            repeat(count) { i ->
+                selected.add(this@minus.removeAt(this@minus.size - 1 - i))
+            }
+        } else {
+            repeat(count) { i ->
+                selected.add(this@minus.removeAt(i))
+            }
+        }
+
+        other.addAll(this@minus)
+    }
+}
+
+inline fun <reified O : Any, S : Any> MutableList<O>.divide(
+    type: KClass<S>,
+    fromEnd: Boolean = false,
+    untilFirstDifferent: Boolean = false
+): MathList<O, S> {
+    return MathList<O, S>().apply {
+        var i = 0
+        fun isTypeToSelect(): Boolean = this@divide[i].javaClass == type.java
+
+        fun updateSelected() {
+            if (isTypeToSelect()) {
+                selected.add(this@divide.removeAt(i) as S)
+            }
+        }
+
+        if (fromEnd) {
+            i = this@divide.size - 1
+            while (i >= 0) {
+                if (untilFirstDifferent && isTypeToSelect()) {
+                    break
+                }
+
+                updateSelected()
+                i--
+            }
+
+        } else {
+            i = 0
+            while (i < this@divide.size) {
+                if (untilFirstDifferent && isTypeToSelect()) {
+                    break
+                }
+
+                updateSelected()
+                i++
+            }
+        }
+
+        other.addAll(this@divide)
+    }
+}
+
+@Composable
+private fun ConsoleView(dharmaChain: SnapshotStateList<EditorItem>) {
+    Column(modifier = Modifier.background(Color.Gray)) {
+
+        var code = ""
+        var lastChain = dharmaChain.divide(
+            type = EditorItem.Dharma::class,
+            fromEnd = true,
+            untilFirstDifferent = true
+        ).selected
+        try {
+            code = transformAtomsChain(lastChain)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        Text("Kotlin: $code")
+
+        var console = ""
+        try {
+            console = interpretCode(
+                result = transformAtomsChain(lastChain),
+                transformation = lastChain[lastChain.size - 1].template
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        Text("Console: $console")
+    }
+}
+
+@Composable
+fun TemplateEditorView(
+    selectedEditorItem: EditorItem?,
+    onSaveClick: (name: String, template: String) -> Unit
+) {
+    Surface(Modifier.fillMaxSize()) {
+        when (selectedEditorItem) {
+            is EditorItem.Dharma -> {
+                Column {
+                    var templateValue by remember {
+                        mutableStateOf(
+                            selectedEditorItem.template
+                        )
+                    }
+                    Row {
+                        TextField(
+                            value = templateValue,
+                            label = { Text("Body") },
+                            onValueChange = {
+                                templateValue = it
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    var nameValue by remember {
+                        mutableStateOf(
+                            selectedEditorItem.name
+                        )
+                    }
+                    Row {
+                        TextField(
+                            value = nameValue,
+                            label = { Text("Name") },
+                            onValueChange = {
+                                nameValue = it
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Button({
+                        onSaveClick(nameValue, templateValue)
+                    }) {
+                        Text("Save")
+                    }
+                }
+            }
+
+            else -> {}
+        }
+    }
+}
+
+@Composable
+fun TemplatesView(
+    templates: SnapshotStateList<TemplateItem>,
+    onTemplateClick: (TemplateItem) -> Unit
+) {
+    LazyHorizontalStaggeredGrid(
+        modifier = Modifier.height(120.dp),
+        rows = StaggeredGridCells.Adaptive(32.dp),
+        horizontalItemSpacing = 4.dp,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        content = {
+            items(templates, key = {
+                it.id
+            }) { it ->
+                val containerColor =
+                    if (it.dharma.template.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.inversePrimary
+                Button(
+                    colors = ButtonDefaults.buttonColors()
+                        .copy(containerColor = containerColor),
+                    onClick = {
+                        println("here! $it")
+                        if (it.dharma.template.isNotEmpty()) {
+                            // TODO: color
+//                                            val argsCount = it.name.count { it == '$' }
+//
+//                                            repeat(argsCount) {
+//                                                dharmaChain[dharmaChain.size - 1 - it - 1].color =
+//                                                    Color.Yellow
+//                                            }
+                        }
+
+                        onTemplateClick(it)
+
+                    }) {
+                    Text(it.dharma.name)
+                }
+            }
+        }
+    )
 }
 
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
     TrueProgrammingLanguageTheme {
-        Main()
+        MainScreenView()
     }
 }
 

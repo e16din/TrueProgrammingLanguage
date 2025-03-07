@@ -1,6 +1,6 @@
 package me.truelang.lang
 
-import me.truelang.DharmaItem
+import me.truelang.EditorItem
 import me.truelang.indexOf
 import me.truelang.indexOfInverse
 import kotlin.math.max
@@ -187,47 +187,89 @@ fun interpretCode(transformation: String, result: String): String {
 
             interpretMath(addBrackets(result))
         }
+
         else -> ""
     }
 }
 
-var transformationsSource = """
-        | = |
-        $ = $
-        -> = ->
+var defaultDharmaTemplates = """
+        // primitive types examples
+        string constant = string
+        1 = int
+        1l = long
+        1.0 = double
+        true = boolean
+        1,2,3 = array, list
+        1,a; 2,b; 3,c; = dictionary, map
         
-        |:a * $:b = multiply
+        | makeMessage = message
         
-        println(|) = print
+        true != false -> printNext it is true 
+        
+        // то что уже есть в цепочке 
+        | = | 
+        
+        // то что ожидается на ввод
+        $ = $ 
+        
+        
+        
+        // ... - все данные в цепочке
+        makeTemplate ... = name, = 
+        ... = ..., dharmasChain
+        
+        |:a * $:b = multiply, *
+        |:a + $:b = add, +
+        
+        println(|) = printIt
         println($:string) = printNext
         
-        |:a + $:b = add
+        // | - 1  - дает пару контейнер и выбранное .container, .selected (last, first, get, set)
+        (| - 1).selected.last = getNext
+        |.count = count, size, length
+        | size * getNext = foreach
+        | foreach printIt = printAll 
+
         
-        |:a + $:b * 12 + $:c = func1
-        
+        :start: import compose.Text
         Text(text = $:text) = Text
-        Button(content = $:content, onClick = $:onClick) = Button
+        Button(content = $:content, onClick = {
+            $:onClick 
+        }) = Button
+        
+//        $:lets_start
+        
+//        1. 10 // $:a a
+//        2. + // name
+//        3. 12 // $:b b
+//        4. printIt // console: 30
+//        5. = func1 
+//        
+//        1. 10 + 12 printIt = func2
+        
+                            
+        // long click on dharma template -> interpretator with selected dharma chain 
        
 """.trimIndent()
 
 fun fillTransformations(): MutableMap<String, String> {
     var transformationsMap = mutableMapOf<String, String>() // name, body
-    var index = transformationsSource.indexOf('=')
+    var index = defaultDharmaTemplates.indexOf('=')
     var rightIndex = 0
 
     while (true) {
-        val leftIndex = max(0, transformationsSource.indexOfInverse('\n', startIndex = index))
+        val leftIndex = max(0, defaultDharmaTemplates.indexOfInverse('\n', startIndex = index))
         rightIndex = min(
-            transformationsSource.length,
-            transformationsSource.indexOf('\n', startIndex = index)
+            defaultDharmaTemplates.length,
+            defaultDharmaTemplates.indexOf('\n', startIndex = index)
         )
-        val body = transformationsSource.substring(leftIndex, index).trim()
-        val name = transformationsSource.substring(index + 1, rightIndex).trim()
+        val body = defaultDharmaTemplates.substring(leftIndex, index).trim()
+        val name = defaultDharmaTemplates.substring(index + 1, rightIndex).trim()
 
         transformationsMap.put(name, body)
 
-        transformationsSource = transformationsSource.replaceRange(leftIndex, rightIndex, "")
-        index = transformationsSource.indexOf('=', startIndex = 0)
+        defaultDharmaTemplates = defaultDharmaTemplates.replaceRange(leftIndex, rightIndex, "")
+        index = defaultDharmaTemplates.indexOf('=', startIndex = 0)
 
         if (index < 0) {
             break
@@ -236,19 +278,19 @@ fun fillTransformations(): MutableMap<String, String> {
     return transformationsMap
 }
 
-val transformationsMap = fillTransformations()
-fun transformAtomsChain(dharmaItems: List<DharmaItem>): String {
+val dharmasMap = fillTransformations()
+fun transformAtomsChain(templateItems: List<EditorItem.Dharma>): String {
     val endOfChainStr = ""
 
     var codeBlock = ""
     val dataItems = mutableListOf<String>()
     var nextAtomsGets = 0
-    for (i in dharmaItems.indices) {
+    for (i in templateItems.indices) {
         if (nextAtomsGets > 0) {
             nextAtomsGets -= 1
             continue
         }
-        val atom = dharmaItems[i].dharma.body.trim()
+        val atom = templateItems[i].template.trim()
         if (atom == endOfChainStr) {
             if (dataItems.isNotEmpty()) {
                 codeBlock += "${dataItems.last()}\n"
@@ -256,13 +298,13 @@ fun transformAtomsChain(dharmaItems: List<DharmaItem>): String {
             }
         }
 
-        if (!transformationsMap.contains(atom)) {
+        if (!dharmasMap.contains(atom)) {
             if (!atom.isEmpty() && !atom.startsWith("//")) {
                 dataItems.add(atom)
             }
 
         } else {
-            val template = transformationsMap[atom]
+            val template = dharmasMap[atom]
             var newData = "$template"
             var index = newData.indexOf('$')
             val totalCount = newData.count { it == '$' }
@@ -278,7 +320,7 @@ fun transformAtomsChain(dharmaItems: List<DharmaItem>): String {
                         dataItems[dataIndex].trim()
                     )
                 } else {
-                    val nextAtom = dharmaItems[i + 1].dharma.body.trim()
+                    val nextAtom = templateItems[i + 1].template.trim()
                     nextAtomsGets += 1
                     //dataItems.add(nextAtom)
                     newData = newData.replaceRange(
