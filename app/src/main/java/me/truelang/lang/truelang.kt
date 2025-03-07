@@ -207,14 +207,14 @@ var defaultDharmaTemplates = """
         true != false -> printNext it is true 
         
         yes
-        | == yes -> print Success
+        |: == yes -> print Success
        
         
         // то что уже есть в цепочке 
-        | = | 
+        |: = |: 
         
         // то что ожидается на ввод
-        $ = $ 
+        $: = $: 
         
         
         
@@ -311,7 +311,7 @@ fun transformAtomsChain(templateItems: List<LineItem.Dharma>): String {
         } else {
             val template = dharmasMap[atom]
             var newData = "$template"
-            var index = newData.indexOf('$')
+            var index = newData.indexOf('$') // todo: add |:
             val totalCount = newData.count { it == '$' }
 
             var counter = 1

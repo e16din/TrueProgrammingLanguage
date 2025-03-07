@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyHorizontalStaggeredGri
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -38,12 +39,14 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -128,7 +131,8 @@ sealed class LineItem(open val id: Int) {
         override val id: Int,
         var name: String,
         var body: String,
-        var color: Color = Color.White
+        var color: Color = Color.White,
+        var argumentName: String? = null
     ) : LineItem(id)
 
     data class End(
@@ -217,6 +221,7 @@ fun MainScreenView(
         }
 
         var selectedDharmaItem by remember { mutableStateOf<LineItem.Dharma?>(null) }
+        var dharmaArguments = remember { mutableStateListOf<LineItem.Dharma>() }
         var selectedItemIndex by remember { mutableIntStateOf(0) }
 
         var dharmaChainToName by remember { mutableStateOf<List<LineItem>?>(null) }
@@ -242,6 +247,34 @@ fun MainScreenView(
                             }
 
                             is LineItem.Dharma -> {
+                                if(dharma.name.isEmpty()) {
+                                    dharmaArguments.add(dharma)
+                                }
+                                if(!dharma.body.startsWith("\"")
+                                    && !dharma.body.startsWith("`")
+                                    && dharma.body.contains("|")) {
+                                    val selectedArgNames = dharma.body.divide(
+                                        itemSize = 1,
+                                        betweenStart = "|:",
+                                        betweenEnd = " ",
+                                    ).selected
+
+                                    val selectedDharmasIndices = dharmaChains.divide<LineItem, LineItem.Dharma>(
+                                        selectCondition = { it, selected ->
+                                            it is LineItem.Dharma
+                                                    && selected.size < selectedArgNames.size
+                                        }
+                                    ).selectedIndices
+
+                                    var i = 0
+                                    selectedDharmasIndices.forEach { index ->
+                                        dharmaChains[index] = (dharmaChains[index] as LineItem.Dharma)
+                                            .copy(color = Color.Green,
+                                                argumentName = selectedArgNames[i]
+                                            )
+                                        i++
+                                    }
+                                }
                                 DharmaItemView(
                                     dharma,
                                     i,
@@ -272,10 +305,7 @@ fun MainScreenView(
                     item {
                         InterpretatorView(dharmaChains, onChainNamed = {
                             dharmaChainToName = dharmaChains.divide<LineItem, LineItem>(
-                                selectCondition = {
-                                    true
-                                },
-                                breakCondition = {
+                                breakCondition = { it, selected ->
                                     it is LineItem.End
                                 },
                                 fromEnd = true,
@@ -370,26 +400,42 @@ fun DharmaItemView(
     dharma: LineItem.Dharma,
     i: Int,
     dharmaChain: SnapshotStateList<LineItem>,
-    onItemSelected: (LineItem) -> Unit
+    onItemSelected: (LineItem) -> Unit,
 ) {
 
-    Row(
-        Modifier
-            .background(dharma.color)
-            .clickable {
-                onItemSelected(dharma)
-            }) {
-        Text(
-            text = dharma.name + " = " + dharma.body,
-            modifier = Modifier.weight(1f)
-        )
+    Box {
+        Row(
+            Modifier
+                .background(dharma.color)
+                .clickable {
+                    onItemSelected(dharma)
+                }) {
+            Text(
+                "$i.",
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+            )
+            Text(
+                text = dharma.name + " = " + dharma.body,
+                modifier = Modifier.weight(1f)
+            )
 
-        if (dharma.body.trim().isNotEmpty()) {
             Button(onClick = {
                 dharmaChain.removeAt(i)
             }) {
                 Icon(Icons.Default.Close, "Remove")
             }
+        }
+
+        dharma.argumentName?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.onSecondary,
+                modifier = Modifier
+                    .padding(top = 48.dp, start = 64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondary)
+            )
         }
     }
 }
@@ -403,10 +449,10 @@ private fun InterpretatorView(
 ) {
     Column(modifier = Modifier.background(Color.Gray)) {
         var lastChain = dharmaChain.divide<LineItem, LineItem.Dharma>(
-            selectCondition = {
+            selectCondition = { it, selected ->
                 it is LineItem.Dharma
             },
-            breakCondition = {
+            breakCondition = { it, selected ->
                 it is LineItem.End
             },
             fromEnd = true,
@@ -545,17 +591,6 @@ fun TemplatesView(
                     colors = ButtonDefaults.buttonColors()
                         .copy(containerColor = containerColor),
                     onClick = {
-                        println("here! $it")
-                        if (it.dharma.body.isNotEmpty()) {
-                            // TODO: color
-//                                            val argsCount = it.name.count { it == '$' }
-//
-//                                            repeat(argsCount) {
-//                                                dharmaChain[dharmaChain.size - 1 - it - 1].color =
-//                                                    Color.Yellow
-//                                            }
-                        }
-
                         onTemplateClick(it)
 
                     }) {
@@ -569,8 +604,28 @@ fun TemplatesView(
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
+    val main = """
+            # Let's start!
+            10
+            multiply
+            20
+            add
+            22
+            print
+            
+            # Enter your code:
+
+        """.trimIndent()
+    val dharmaChains = remember {
+        main.toDharmaChains()
+            .toMutableStateList()
+    }
     TrueProgrammingLanguageTheme {
-//        MainScreenView(dharmaChain = dharmaChainToName)
+        MainScreenView(
+            Modifier,
+            dharmaChains = dharmaChains,
+            name = "Main"
+        )
     }
 }
 

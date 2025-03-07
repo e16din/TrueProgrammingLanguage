@@ -3,6 +3,7 @@ package me.truelang.lang
 class MathList<OTHER : Any, SELECTED : Any> {
     val other = mutableListOf<OTHER>()
     val selected = mutableListOf<SELECTED>()
+    val selectedIndices = mutableListOf<Int>()
 }
 
 class MathString {
@@ -55,16 +56,17 @@ infix fun <T : Any> List<T>.minus(count: Int): MathList<T, T> {
 infix fun <T : Any> List<T>.plus(value: T): List<T> {
     return plus(1, value, false)
 }
+
 infix fun <T : Any> List<T>.plusToStart(value: T): List<T> {
     return plus(1, value, true)
 }
 
-fun <T : Any> List<T>.plus(count: Int, value: T, toStart:Boolean = false): List<T> {
+fun <T : Any> List<T>.plus(count: Int, value: T, toStart: Boolean = false): List<T> {
     val result = this.toMutableList()
     repeat(count) {
-        if(toStart) {
+        if (toStart) {
             result.add(0, value)
-        }else {
+        } else {
             result.add(value)
         }
     }
@@ -85,11 +87,14 @@ fun <T : Any> List<T>.minus(count: Int, fromEnd: Boolean = false): MathList<T, T
 
         if (fromEnd) {
             repeat(count) { i ->
-                selected.add(source.removeAt(source.size - 1 - i))
+                val index = source.size - 1 - i
+                selected.add(source.removeAt(index))
+                selectedIndices.add(index)
             }
         } else {
             repeat(count) { i ->
                 selected.add(source.removeAt(i))
+                selectedIndices.add(i)
             }
         }
 
@@ -97,24 +102,38 @@ fun <T : Any> List<T>.minus(count: Int, fromEnd: Boolean = false): MathList<T, T
     }
 }
 
-inline fun <reified O : Any, S : Any> MutableList<O>.divide(
-    crossinline selectCondition: (it: O) -> Boolean,
-    breakCondition: (it: O) -> Boolean,
+inline fun String.divide(
+    itemSize: Int = 1,
+    fromIndex:Int = 0,
+    toIndex:Int = this.length-1,
+    betweenStart:String = "",
+    betweenEnd:String = "",
+    selectCondition: (it: String) -> Boolean = { true },
+    breakCondition: (it: String) -> Boolean = { false },
+    fromEnd: Boolean = false
+): MathList<String, String> {
+
+}
+
+fun <O : Any, S : Any> MutableList<O>.divide(
+    selectCondition: (it: O, selected: List<S>) -> Boolean = { _, _ -> true },
+    breakCondition: (it: O, selected: List<S>) -> Boolean = { _, _ -> false },
     fromEnd: Boolean = false
 ): MathList<O, S> {
     return MathList<O, S>().apply {
         var i = 0
 
         fun updateSelected() {
-            if (selectCondition(this@divide[i])) {
+            if (selectCondition(this@divide[i], selected)) {
                 selected.add(this@divide.removeAt(i) as S)
+                selectedIndices.add(i)
             }
         }
 
         if (fromEnd) {
             i = this@divide.size - 1
             while (i >= 0) {
-                if (breakCondition(this@divide[i])) {
+                if (breakCondition(this@divide[i], selected)) {
                     break
                 }
 
@@ -125,7 +144,7 @@ inline fun <reified O : Any, S : Any> MutableList<O>.divide(
         } else {
             i = 0
             while (i < this@divide.size) {
-                if (breakCondition(this@divide[i])) {
+                if (breakCondition(this@divide[i], selected)) {
                     break
                 }
 
