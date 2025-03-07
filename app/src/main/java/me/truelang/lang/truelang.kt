@@ -1,6 +1,6 @@
 package me.truelang.lang
 
-import me.truelang.EditorItem
+import me.truelang.LineItem
 import me.truelang.indexOf
 import me.truelang.indexOfInverse
 import kotlin.math.max
@@ -202,9 +202,13 @@ var defaultDharmaTemplates = """
         1,2,3 = array, list
         1,a; 2,b; 3,c; = dictionary, map
         
-        | makeMessage = message
+        # message
         
         true != false -> printNext it is true 
+        
+        yes
+        | == yes -> print Success
+       
         
         // то что уже есть в цепочке 
         | = | 
@@ -214,9 +218,12 @@ var defaultDharmaTemplates = """
         
         
         
-        // ... - все данные в цепочке
-        makeTemplate ... = name, = 
-        ... = ..., dharmasChain
+        // :chain: - все линии в цепочке
+        :chain: = chainName
+        
+        5
+        `:start: = = = :chain: = \| = =` = unhandledString
+        ":start: = = = :chain: = \| = = 2" = unhandledString
         
         |:a * $:b = multiply, *
         |:a + $:b = add, +
@@ -232,10 +239,8 @@ var defaultDharmaTemplates = """
 
         
         :start: import compose.Text
-        Text(text = $:text) = Text
-        Button(content = $:content, onClick = {
-            $:onClick 
-        }) = Button
+        Text $:text = Text
+        Button $:text $:onClick = Button
         
 //        $:lets_start
         
@@ -279,7 +284,7 @@ fun fillTransformations(): MutableMap<String, String> {
 }
 
 val dharmasMap = fillTransformations()
-fun transformAtomsChain(templateItems: List<EditorItem.Dharma>): String {
+fun transformAtomsChain(templateItems: List<LineItem.Dharma>): String {
     val endOfChainStr = ""
 
     var codeBlock = ""
@@ -290,7 +295,7 @@ fun transformAtomsChain(templateItems: List<EditorItem.Dharma>): String {
             nextAtomsGets -= 1
             continue
         }
-        val atom = templateItems[i].template.trim()
+        val atom = templateItems[i].body.trim()
         if (atom == endOfChainStr) {
             if (dataItems.isNotEmpty()) {
                 codeBlock += "${dataItems.last()}\n"
@@ -320,7 +325,7 @@ fun transformAtomsChain(templateItems: List<EditorItem.Dharma>): String {
                         dataItems[dataIndex].trim()
                     )
                 } else {
-                    val nextAtom = templateItems[i + 1].template.trim()
+                    val nextAtom = templateItems[i + 1].body.trim()
                     nextAtomsGets += 1
                     //dataItems.add(nextAtom)
                     newData = newData.replaceRange(
