@@ -32,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +84,7 @@ private fun MainScreenProvider(innerPadding: PaddingValues) {
             
             Spacer 
             
+            `add` 
             Button
             // onClick
             // update text state
@@ -205,14 +207,14 @@ fun String.toDharmaChains(): MutableList<LineItem> {
 }
 
 fun main() {
-    val ends = listOf(")"," ",",", "]", "\n", "}")
-    val args = "println(|:value) = print".select(
+    val ends = listOf(")", " ", ",", "]", "\n", "}")
+    val args = "println(|:value) = print".divideBy(
         start = "|:",
-        selectCondition = { it, selected ->
+        condition = { it, selected, isLast ->
             println(it)
             it.endsWithAny(ends)
         }
-    ).selected.map { it.replaceAll(ends + "|:") }
+    ).map { it.replaceAll(ends + "|:") }
     println(args)
 }
 
@@ -228,54 +230,128 @@ fun MainScreenView(
     }
 
     fun addDharmaToChain(dharma: LineItem.Dharma) {
+        println("addDharmaToChain: ${dharma}")
+        val ends = listOf(")", " ", ",", "]", "\n", "}")
+
         if (!dharma.body.startsWith("\"")
             && !dharma.body.startsWith("`")
             && dharma.body.contains("|")
         ) {
             println("debug: 52")
-            val selectedArgNames = dharma.body.select(
+            val prevArgNames = dharma.body.divideBy(
                 start = "|:",
-                selectCondition = { it, selected ->
-                    it.endsWith(" ")
+                condition = { it, selected, isLast ->
+                    println(it)
+                    it.endsWithAny(ends) || isLast
                 }
-            ).selected.map { it.trim().replace("|:", "") }
-            println("selectedArgNames: $selectedArgNames")
+            ).map { it.replaceAll(ends + "|:") }
+            println("selectedArgNames: $prevArgNames")
 
             val selectedDharmasIndices =
-                dharmaChains.select<LineItem, LineItem.Dharma>(
-                    selectCondition = { it, selected ->
+                dharmaChains.divideBy<LineItem, LineItem.Dharma>(
+                    condition = { it, selected ->
                         it is LineItem.Dharma
-                                && selected.size < selectedArgNames.size
-                    }
+                                && selected.size < prevArgNames.size
+                    },
+                    fromEnd = true
                 ).selectedIndices
+
+            println("selectedDharmasIndices: $selectedDharmasIndices")
 
             var i = 0
             selectedDharmasIndices.forEach { index ->
-                println("debug: 6")
-                dharmaChains[index] = dharma.copy(
+                println("debug: 6: $index")
+
+                dharmaChains[index] = (dharmaChains[index] as LineItem.Dharma).copy(
                     id = idCounter,
                     color = Color.Green,
-                    argumentName = selectedArgNames[i]
+                    argumentName = prevArgNames[i]
                 )
                 i++
             }
         }
 
-        dharmaChains.add(
-            dharma.copy(idCounter)
-        )
+        var argPlaceholdersToCommit = listOf<LineItem.Dharma>()
+        if (!dharma.body.startsWith("\"")
+            && !dharma.body.startsWith("`")
+            && dharma.body.contains("$")
+        ) {
+            println("debug: 552")
+
+            val nextArgNames = dharma.body.divideBy(
+                start = "$:",
+                condition = { it, selected, isLast ->
+                    println(it)
+                    it.endsWithAny(ends) || isLast
+                }
+            ).map { it.replaceAll(ends + "$:") }
+            println("nextArgNames: $nextArgNames")
+
+            val selectedDharmasIndices =
+                dharmaChains.divideBy<LineItem, LineItem.Dharma>(
+                    condition = { it, selected ->
+                        it is LineItem.Dharma
+                                && selected.size < nextArgNames.size
+                    },
+                    fromEnd = true
+                ).selectedIndices
+
+            println("selectedDharmasIndices: $selectedDharmasIndices")
+
+            var i = 0
+            argPlaceholdersToCommit = selectedDharmasIndices.map {
+                LineItem.Dharma(
+                    id = idCounter,
+                    name = "",
+                    body = "$",
+                    color = Color.Yellow,
+                    argumentName = nextArgNames[i]
+                ).also {
+                    i++
+                }
+            }
+        }
+
+        val argPlaceholdersCommited = (dharmaChains.divideBy<LineItem, LineItem.Dharma>(
+            condition = { it, selected ->
+                it is LineItem.Dharma
+                        && it.body == "$"
+            },
+            fromEnd = true,
+            addToStart = true
+        ))
+        println("lastDharmaResult: $argPlaceholdersCommited")
+        if (argPlaceholdersCommited.selected.isNotEmpty()) {
+            println("111")
+            val index = argPlaceholdersCommited.selectedIndices.first()
+            dharmaChains[index] = dharma.copy(
+                id = idCounter,
+                color = (dharmaChains[index] as LineItem.Dharma).color,
+                argumentName = (dharmaChains[index] as LineItem.Dharma).argumentName
+            )
+
+        } else {
+            println("222")
+            dharmaChains.add(dharma)
+            argPlaceholdersToCommit.forEach { argDharma ->
+                dharmaChains.add(argDharma)
+            }
+        }
     }
 
     Scaffold(topBar = {
-        Text(name)
-    }) { padding ->
+        NavigationBar {
+            Text(name)
+        }
+    }, 
+        modifier =  Modifier.systemBarsPadding()) { padding ->
         var inputText by remember { mutableStateOf(TextFieldValue("")) }
 
         val dharmaTemplates = remember {
             dharmasMap.keys.mapIndexed { index, key ->
                 TemplateItem(
                     id = index,
-                    dharma = LineItem.Dharma(id = -1, name = key, body = dharmasMap[key] ?: "")
+                    dharma = LineItem.Dharma(id = idCounter, name = key, body = dharmasMap[key] ?: "")
                 )
 
             }.toMutableStateList()
@@ -290,8 +366,8 @@ fun MainScreenView(
 
         Surface(
             modifier
-                .fillMaxSize()
                 .systemBarsPadding()
+                .fillMaxSize()
                 .padding(padding)
         ) {
             Box(Modifier.fillMaxSize()) {
@@ -303,8 +379,13 @@ fun MainScreenView(
                             is LineItem.Message -> {
                                 Row {
                                     Spacer(Modifier.weight(1f))
-                                    Text("# ${dharma.message} #")
+                                    Text("${dharma.message}")
                                     Spacer(Modifier.weight(1f))
+                                    Button(onClick = {
+                                        dharmaChains.removeAt(i)
+                                    }) {
+                                        Icon(Icons.Default.Close, "Remove")
+                                    }
                                 }
                             }
 
@@ -470,8 +551,9 @@ fun DharmaItemView(
                 it,
                 color = MaterialTheme.colorScheme.onSecondary,
                 modifier = Modifier
-                    .padding(top = 48.dp, start = 64.dp)
+                    .padding(top = 32.dp, start = 24.dp)
                     .clip(CircleShape)
+                    .padding(4.dp)
                     .background(MaterialTheme.colorScheme.secondary)
             )
         }
@@ -488,8 +570,8 @@ private fun InterpretatorView(
     println("InterpretatorView")
     Column(modifier = Modifier.background(Color.Gray)) {
         println("debug: 111")
-        var lastChain1 = dharmaChain.select<LineItem, LineItem.Dharma>(
-            selectCondition = { it, selected ->
+        var lastChain1 = dharmaChain.divideBy<LineItem, LineItem.Dharma>(
+            condition = { it, selected ->
                 it is LineItem.Dharma
             },
             breakCondition = { it, selected ->
@@ -581,17 +663,20 @@ fun TemplateEditorView(
 }
 
 val keyboardActions = listOf(
-    "+",
-    "-",
-    "/",
-    "*",
+    "+",// plus
+    "-",// minus
+    "/",// divide
+    "/?",// divideBy
+    "*",// multiply // for
+    "*?",// multiplyBy // while // 0 = i, i < n *? (i+1 = i, print)
     " ",
-    "|",
-    "$",
-    "...",
-    ":",
-    "#",
-    ":start:"
+    "|:",// prevArg
+    "$:",// nextArg
+    "...",// all dharma lines
+    "#", // message
+    "=" // name
+
+//    ":start:" // insert to start of implementation file
 )
 
 @Composable

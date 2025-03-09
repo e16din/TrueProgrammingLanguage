@@ -229,6 +229,7 @@ var defaultDharmaTemplates = """
         
         |:a * $:b = multiply, *
         |:a + $:b = add, +
+        |:a + $:b + $:c = test
         
         println(|:value) = print
         println($:value) = printNext

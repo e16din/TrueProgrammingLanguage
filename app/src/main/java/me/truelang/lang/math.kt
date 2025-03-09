@@ -135,13 +135,14 @@ fun <T : Any> List<T>.divide(partsCount: Int, fromEnd: Boolean = false): List<Li
     return result
 }
 
-fun String.select(
-    start: String,
-    selectCondition: (it: String, selected: List<String>) -> Boolean = { _, _ -> true },
-    breakCondition: (it: String, selected: List<String>) -> Boolean = { _, _ -> false },
-    fromEnd: Boolean = false
-): SelectList<String, String> {
-    val result = SelectList<String, String>()
+fun String.divideBy(
+    start: String? = null,
+    condition: (it: String, selected: List<String>, isLast: Boolean) -> Boolean = { _, _, _ -> true },
+    breakCondition: (it: String, selected: List<String>, isLast: Boolean) -> Boolean = { _, _, _ -> false },
+    fromEnd: Boolean = false,
+    addToStart: Boolean = false
+): List<String> {
+    val result = mutableListOf<String>()
 
     if (this.isEmpty()) {
         return result
@@ -149,28 +150,41 @@ fun String.select(
 
     var it = StringBuilder()
 
-    var startIndex = if (fromEnd) this.indexOf(start, last = true) else this.indexOf(start)
+    var startIndex = if (start != null)
+        if (fromEnd) this.indexOf(start, last = true) else this.indexOf(start)
+    else
+        0
+
     while (startIndex != -1) {
         val ints = if (fromEnd)
             this.length - 1 downTo startIndex
         else
             startIndex until this.length
 
+
         for (i in ints) {
+            startIndex = i
+
             it.append(this[i])
             val current = it.toString()
-            if (breakCondition(current, result.selected)) {
+            val isLast = if (fromEnd) i == 0 else i == this.length - 1
+            if (breakCondition(current, result, isLast)) {
                 return result
             }
 
-            if (selectCondition(current, result.selected)) {
-                result.selected.add(current)
+            if (condition(current, result, isLast)) {
+                if (addToStart) {
+                    result.add(0, current)
+                } else {
+                    result.add(current)
+                }
+
                 it.clear()
                 break
             }
         }
 
-        startIndex = this.indexOf(start, startIndex + 1)
+        startIndex = if (start != null) this.indexOf(start, startIndex + 1) else startIndex
     }
 
     return result
@@ -196,26 +210,34 @@ fun CharSequence.indexOf(
     return -1
 }
 
-fun <O : Any, S : Any> MutableList<O>.select(
-    selectCondition: (it: O, selected: List<S>) -> Boolean = { _, _ -> true },
+fun <O : Any, S : Any> MutableList<O>.divideBy(
+    condition: (it: O, selected: List<S>) -> Boolean = { _, _ -> true },
     breakCondition: (it: O, selected: List<S>) -> Boolean = { _, _ -> false },
-    fromEnd: Boolean = false
+    fromEnd: Boolean = false,
+    addToStart: Boolean = false,
 ): SelectList<O, S> {
     return SelectList<O, S>().apply {
-        if (this@select.isNotEmpty()) {
+        other.addAll(this@divideBy)
+
+        if (this@divideBy.isNotEmpty()) {
             var i = 0
 
             fun updateSelected() {
-                if (selectCondition(this@select[i], selected)) {
-                    selected.add(this@select.removeAt(i) as S)
-                    selectedIndices.add(i)
+                if (condition(other[i], selected)) {
+                    if (addToStart) {
+                        selected.add(0, other.removeAt(i) as S)
+                        selectedIndices.add(0, i)
+                    } else {
+                        selected.add(other.removeAt(i) as S)
+                        selectedIndices.add(i)
+                    }
                 }
             }
 
             if (fromEnd) {
-                i = this@select.size - 1
+                i = other.size - 1
                 while (i >= 0) {
-                    if (breakCondition(this@select[i], selected)) {
+                    if (breakCondition(other[i], selected)) {
                         break
                     }
 
@@ -225,8 +247,8 @@ fun <O : Any, S : Any> MutableList<O>.select(
 
             } else {
                 i = 0
-                while (i < this@select.size) {
-                    if (breakCondition(this@select[i], selected)) {
+                while (i < other.size) {
+                    if (breakCondition(other[i], selected)) {
                         break
                     }
 
@@ -235,7 +257,5 @@ fun <O : Any, S : Any> MutableList<O>.select(
                 }
             }
         }
-
-        other.addAll(this@select)
     }
 }
