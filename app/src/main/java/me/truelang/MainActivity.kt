@@ -39,7 +39,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +53,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.truelang.lang.*
 import me.truelang.ui.theme.TrueProgrammingLanguageTheme
+import kotlin.text.StringBuilder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,14 +106,10 @@ private fun MainScreenProvider(innerPadding: PaddingValues) {
             # Enter your code:
 
         """.trimIndent()
-    val dharmaChains = remember {
-        main.toDharmaChains()
-            .toMutableStateList()
-    }
 
     MainScreenView(
         modifier = Modifier.padding(innerPadding),
-        dharmaChains = dharmaChains,
+        initialChains = main.toDharmaChains(),
         name = "Main"
     )
 }
@@ -121,14 +117,21 @@ private fun MainScreenProvider(innerPadding: PaddingValues) {
 
 data class TemplateItem(var id: Int, val dharma: LineItem.Dharma)
 
+private var idCounterVal = 0
+val idCounter: Int
+    get() {
+        idCounterVal += 1
+        return idCounterVal
+    }
+
 sealed class LineItem(open val id: Int) {
     data class Message(
-        override val id: Int,
+        override val id: Int = idCounter,
         var message: String,
     ) : LineItem(id)
 
     data class Dharma( // Transformation, Presenter, Map, Function, Producer, Action, Operation
-        override val id: Int,
+        override val id: Int = idCounter,
         var name: String,
         var body: String,
         var color: Color = Color.White,
@@ -136,7 +139,7 @@ sealed class LineItem(open val id: Int) {
     ) : LineItem(id)
 
     data class End(
-        override val id: Int
+        override val id: Int = idCounter,
     ) : LineItem(id)
 }
 
@@ -172,16 +175,18 @@ fun String.toDharmaChains(): MutableList<LineItem> {
     lines.forEach {
         val line = it.trim()
         when {
-            line.first() == '#' -> {
+            line.isNotEmpty() && line.first() == '#' -> {
                 result.add(
-                    LineItem.Message(id = lines.size, message = (line minus 1).other)
+                    LineItem.Message(message = (line minus 1).other)
                 )
+                println("id1: ${result.last().id}")
             }
 
             dharmasMap.keys.contains(line) -> {
                 result.add(
-                    LineItem.Dharma(id = lines.size, name = line, body = dharmasMap[line] ?: "")
+                    LineItem.Dharma(name = line, body = dharmasMap[line] ?: "")
                 )
+                println("id2: ${result.last().id}")
             }
 
             line.startsWith("//") -> {
@@ -190,21 +195,77 @@ fun String.toDharmaChains(): MutableList<LineItem> {
 
             else -> {
                 result.add(
-                    LineItem.Dharma(id = lines.size, name = "", body = line)
+                    LineItem.Dharma(name = "", body = line)
                 )
+                println("id3: ${result.last().id}")
             }
         }
     }
     return result
 }
 
+fun main() {
+    val ends = listOf(")"," ",",", "]", "\n", "}")
+    val args = "println(|:value) = print".select(
+        start = "|:",
+        selectCondition = { it, selected ->
+            println(it)
+            it.endsWithAny(ends)
+        }
+    ).selected.map { it.replaceAll(ends + "|:") }
+    println(args)
+}
+
 
 @Composable
 fun MainScreenView(
     modifier: Modifier = Modifier,
-    dharmaChains: SnapshotStateList<LineItem>,
+    initialChains: List<LineItem>,
     name: String
 ) {
+    val dharmaChains = remember {
+        initialChains.toMutableStateList()
+    }
+
+    fun addDharmaToChain(dharma: LineItem.Dharma) {
+        if (!dharma.body.startsWith("\"")
+            && !dharma.body.startsWith("`")
+            && dharma.body.contains("|")
+        ) {
+            println("debug: 52")
+            val selectedArgNames = dharma.body.select(
+                start = "|:",
+                selectCondition = { it, selected ->
+                    it.endsWith(" ")
+                }
+            ).selected.map { it.trim().replace("|:", "") }
+            println("selectedArgNames: $selectedArgNames")
+
+            val selectedDharmasIndices =
+                dharmaChains.select<LineItem, LineItem.Dharma>(
+                    selectCondition = { it, selected ->
+                        it is LineItem.Dharma
+                                && selected.size < selectedArgNames.size
+                    }
+                ).selectedIndices
+
+            var i = 0
+            selectedDharmasIndices.forEach { index ->
+                println("debug: 6")
+                dharmaChains[index] = dharma.copy(
+                    id = idCounter,
+                    color = Color.Green,
+                    argumentName = selectedArgNames[i]
+                )
+                i++
+            }
+        }
+
+        dharmaChains.add(
+            dharma.copy(idCounter)
+        )
+    }
+
     Scaffold(topBar = {
         Text(name)
     }) { padding ->
@@ -221,7 +282,7 @@ fun MainScreenView(
         }
 
         var selectedDharmaItem by remember { mutableStateOf<LineItem.Dharma?>(null) }
-        var dharmaArguments = remember { mutableStateListOf<LineItem.Dharma>() }
+//        var dharmaArguments = remember { mutableStateListOf<LineItem.Dharma>() }
         var selectedItemIndex by remember { mutableIntStateOf(0) }
 
         var dharmaChainToName by remember { mutableStateOf<List<LineItem>?>(null) }
@@ -236,6 +297,7 @@ fun MainScreenView(
             Box(Modifier.fillMaxSize()) {
                 LazyColumn {
                     items(dharmaChains.size, key = { i -> dharmaChains[i].id }) { i ->
+                        println("debug: 5")
                         val dharma = dharmaChains[i]
                         when (dharma) {
                             is LineItem.Message -> {
@@ -247,41 +309,17 @@ fun MainScreenView(
                             }
 
                             is LineItem.Dharma -> {
-                                if(dharma.name.isEmpty()) {
-                                    dharmaArguments.add(dharma)
-                                }
-                                if(!dharma.body.startsWith("\"")
-                                    && !dharma.body.startsWith("`")
-                                    && dharma.body.contains("|")) {
-                                    val selectedArgNames = dharma.body.divide(
-                                        itemSize = 1,
-                                        betweenStart = "|:",
-                                        betweenEnd = " ",
-                                    ).selected
+                                println("debug: 51")
 
-                                    val selectedDharmasIndices = dharmaChains.divide<LineItem, LineItem.Dharma>(
-                                        selectCondition = { it, selected ->
-                                            it is LineItem.Dharma
-                                                    && selected.size < selectedArgNames.size
-                                        }
-                                    ).selectedIndices
-
-                                    var i = 0
-                                    selectedDharmasIndices.forEach { index ->
-                                        dharmaChains[index] = (dharmaChains[index] as LineItem.Dharma)
-                                            .copy(color = Color.Green,
-                                                argumentName = selectedArgNames[i]
-                                            )
-                                        i++
-                                    }
-                                }
                                 DharmaItemView(
-                                    dharma,
-                                    i,
-                                    dharmaChains,
+                                    dharma = dharma,
+                                    lineNumber = i,
                                     onItemSelected = {
                                         selectedDharmaItem = dharma
                                         selectedItemIndex = i
+                                    },
+                                    onRemoveClick = {
+                                        dharmaChains.removeAt(i)
                                     }
                                 )
                             }
@@ -303,14 +341,14 @@ fun MainScreenView(
                     }
 
                     item {
-                        InterpretatorView(dharmaChains, onChainNamed = {
-                            dharmaChainToName = dharmaChains.divide<LineItem, LineItem>(
-                                breakCondition = { it, selected ->
-                                    it is LineItem.End
-                                },
-                                fromEnd = true,
-                            ).selected
-                        })
+//                        InterpretatorView(dharmaChains, onChainNamed = {
+//                            dharmaChainToName = dharmaChains.select<LineItem, LineItem>(
+//                                breakCondition = { it, selected ->
+//                                    it is LineItem.End
+//                                },
+//                                fromEnd = true,
+//                            ).selected
+//                        })
                     }
 
                     item {
@@ -320,19 +358,19 @@ fun MainScreenView(
                             }, modifier = Modifier.weight(1f))
                             Button(onClick = {
                                 if (inputText.text.isEmpty()) {
-                                    dharmaChains.add(LineItem.End(dharmaChains.size))
+                                    println("debug: 2")
+                                    dharmaChains.add(LineItem.End())
 
                                 } else {
                                     val parts = inputText.text.split("=")
                                     val template = parts[0]
                                     val name = if (parts.size > 1) parts[1] else ""
                                     val dharma = LineItem.Dharma(
-                                        id = dharmaChains.size,
                                         name = name,
                                         body = template
                                     )
-                                    dharmaChains.add(dharma)
-
+                                    println("debug: 3")
+                                    addDharmaToChain(dharma)
                                     inputText = TextFieldValue("")
                                 }
 
@@ -352,9 +390,8 @@ fun MainScreenView(
 
                     item {
                         TemplatesView(dharmaTemplates, onTemplateClick = {
-                            dharmaChains.add(
-                                it.dharma.copy(dharmaChains.size)
-                            )
+                            println("debug: 1")
+                            addDharmaToChain(it.dharma)
                         })
                     }
 
@@ -368,10 +405,11 @@ fun MainScreenView(
                         selectedDharmaItem = null
                     }
                     TemplateEditorView(selectedDharmaItem, onSaveClick = { name, template ->
+                        println("debug: 4")
                         dharmaChains[selectedItemIndex] = selectedDharmaItem!!.copy(
+                            id = idCounter,
                             name = name,
                             body = template,
-                            id = selectedDharmaItem?.id!! * 10,
                         )
                         selectedDharmaItem = null
                     })
@@ -386,7 +424,7 @@ fun MainScreenView(
                         (dharmaChainToName!! minusFromEnd 1).other.toBlank()
                     MainScreenView(
                         modifier,
-                        dharmaChainToName!!.toMutableStateList(),
+                        dharmaChainToName!!,
                         dharmaChainName
                     )
                 }
@@ -398,11 +436,11 @@ fun MainScreenView(
 @Composable
 fun DharmaItemView(
     dharma: LineItem.Dharma,
-    i: Int,
-    dharmaChain: SnapshotStateList<LineItem>,
+    lineNumber: Int,
     onItemSelected: (LineItem) -> Unit,
+    onRemoveClick: (LineItem) -> Unit,
 ) {
-
+    println("DharmaItemView")
     Box {
         Row(
             Modifier
@@ -411,17 +449,17 @@ fun DharmaItemView(
                     onItemSelected(dharma)
                 }) {
             Text(
-                "$i.",
+                "$lineNumber.",
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
             )
             Text(
-                text = dharma.name + " = " + dharma.body,
+                text = if (dharma.name.isEmpty()) dharma.body else dharma.name,
                 modifier = Modifier.weight(1f)
             )
 
             Button(onClick = {
-                dharmaChain.removeAt(i)
+                onRemoveClick(dharma)
             }) {
                 Icon(Icons.Default.Close, "Remove")
             }
@@ -447,8 +485,10 @@ private fun InterpretatorView(
     dharmaChain: SnapshotStateList<LineItem>,
     onChainNamed: (String) -> Unit
 ) {
+    println("InterpretatorView")
     Column(modifier = Modifier.background(Color.Gray)) {
-        var lastChain = dharmaChain.divide<LineItem, LineItem.Dharma>(
+        println("debug: 111")
+        var lastChain1 = dharmaChain.select<LineItem, LineItem.Dharma>(
             selectCondition = { it, selected ->
                 it is LineItem.Dharma
             },
@@ -457,22 +497,20 @@ private fun InterpretatorView(
             },
             fromEnd = true,
         ).selected
-//        try {
-//            code = transformAtomsChain(lastChain)
-//        } catch (e: Exception) {
-//            e.printStackTrace()
+
+        var lastChain = dharmaChain.filter { it is LineItem.Dharma }.map { it as LineItem.Dharma }
+        println("debug: 222")
+        val lastDharma =
+            dharmaChain.last() as LineItem.Dharma// (lastChain minus 1).selected.first()
+//        val bodyParts = lastDharma.body.replace(" ", "").split("=")
+//        when {
+//            bodyParts.size > 1 && bodyParts[0].startsWith(":chain:") -> {
+//                onChainNamed(bodyParts[1])
+//                return
+//            }
 //        }
-//        Text("Kotlin: $code")
 
-        val lastDharma = (lastChain minus 1).selected.first()
-        val bodyParts = lastDharma.body.replace(" ", "").split("=")
-        when {
-            bodyParts.size > 1 && bodyParts[0].startsWith(":chain:") -> {
-                onChainNamed(bodyParts[1])
-                return
-            }
-        }
-
+        println("debug: 333")
         var console = ""
         try {
             lastResult = transformAtomsChain(lastChain)
@@ -480,10 +518,12 @@ private fun InterpretatorView(
             e.printStackTrace()
         }
 
+        println("debug: 444")
         console = interpretCode(
             result = lastResult,
             transformation = lastDharma.body
         )
+        println("debug: 555")
         Text("Console: $console")
     }
 }
@@ -603,7 +643,7 @@ fun TemplatesView(
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun MainScreenPreview() {
     val main = """
             # Let's start!
             10
@@ -616,14 +656,11 @@ fun GreetingPreview() {
             # Enter your code:
 
         """.trimIndent()
-    val dharmaChains = remember {
-        main.toDharmaChains()
-            .toMutableStateList()
-    }
+
     TrueProgrammingLanguageTheme {
         MainScreenView(
             Modifier,
-            dharmaChains = dharmaChains,
+            initialChains = main.toDharmaChains(),
             name = "Main"
         )
     }

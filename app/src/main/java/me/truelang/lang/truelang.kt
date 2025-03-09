@@ -1,11 +1,13 @@
 package me.truelang.lang
 
 import me.truelang.LineItem
-import me.truelang.indexOf
-import me.truelang.indexOfInverse
 import kotlin.math.max
 import kotlin.math.min
 
+// NOTE: Сначала добавляем затем называем
+// NOTE: Приложение рассматриваем как поток данных в который данные попадают из различных источников
+// и можно как добавить данные так и взять их из потока и представить их в другом виде
+// результат преобразования тоже попадает в поток
 fun main() {
     val data = addBrackets("1+1*2*(2+4)*3 + (12+14/2)*2")
     println(data)
@@ -228,8 +230,8 @@ var defaultDharmaTemplates = """
         |:a * $:b = multiply, *
         |:a + $:b = add, +
         
-        println(|) = printIt
-        println($:string) = printNext
+        println(|:value) = print
+        println($:value) = printNext
         
         // | - 1  - дает пару контейнер и выбранное .container, .selected (last, first, get, set)
         (| - 1).selected.last = getNext
