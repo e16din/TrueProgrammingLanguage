@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.staggeredgrid.LazyHorizontalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -75,24 +76,33 @@ private fun MainScreenProvider(innerPadding: PaddingValues) {
     // todo
     val testScreen = """
             # Press "Run" to show a screen
+            // state for Text
+            |:label = textLabel
+            
             Column
             Spacer
             
-            // state for Text
-            Hello World! = text
-            Text
+            textLabel Text
             
             Spacer 
             
-            `add` 
-            Button
-            // onClick
-            // update text state
-            text + 1 = text
+            `add` Button = AddButton
             
+            [...] = MainScreen
+            
+            `Hello World!` MainScreen
+
             Spacer
-            
-            # Enter your code:
+           
+           1 = counter
+           user[AddButton:onClick] * (counter + 1 = counter `Hello World! |:i` MainScreen)
+           
+//           ProgressBarScreen
+//           PostLogin
+//           backend[PostLogin:onResponse] * (it = response - user - name print) 
+//           
+//           container - element 
+//           container - !element
 
         """.trimIndent()
 
@@ -229,6 +239,31 @@ fun MainScreenView(
         initialChains.toMutableStateList()
     }
 
+    fun calcResult(dharmas: MutableList<LineItem.Dharma>): String {
+        val instructionAndOther =
+            dharmas.divideBy<LineItem.Dharma, LineItem.Dharma>(condition = { it, selected ->
+                it.argumentName == null
+            })
+        val instruction = instructionAndOther.selected.first().body
+        val other = instructionAndOther.other
+
+        var result = instruction
+        other.forEach {
+            result = result
+                .replace("|:${it.argumentName}", it.body)
+                .replace("$:${it.argumentName}", it.body)
+        }
+
+        println("result: $result")
+        try {
+            return interpretMath(addBrackets(result))
+        } catch (e: Exception) {
+            println("Interpretation Error:")
+            e.printStackTrace()
+            return "error"
+        }
+    }
+
     fun addDharmaToChain(dharma: LineItem.Dharma) {
         println("addDharmaToChain: ${dharma}")
         val ends = listOf(")", " ", ",", "]", "\n", "}")
@@ -321,7 +356,7 @@ fun MainScreenView(
             addToStart = true
         ))
         println("lastDharmaResult: $argPlaceholdersCommited")
-        if (argPlaceholdersCommited.selected.isNotEmpty()) {
+        if (argPlaceholdersCommited.selected.isNotEmpty()) { // NOTE: fill placeholders
             println("111")
             val index = argPlaceholdersCommited.selectedIndices.first()
             dharmaChains[index] = dharma.copy(
@@ -329,6 +364,26 @@ fun MainScreenView(
                 color = (dharmaChains[index] as LineItem.Dharma).color,
                 argumentName = (dharmaChains[index] as LineItem.Dharma).argumentName
             )
+            if (argPlaceholdersCommited.selected.size == 1) { // NOTE: completed
+                dharmaChains.add(
+                    LineItem.Dharma(
+                        name = "",
+                        body = calcResult(
+                            dharmaChains.divideBy<LineItem, LineItem.Dharma>(
+                                condition = { it, selected ->
+                                    it is LineItem.Dharma
+                                },
+                                breakCondition = { it, selected ->
+                                    it is LineItem.Dharma
+                                            && it.argumentName == "result" // || end of list
+                                },
+                                fromEnd = true
+                            ).selected
+                        ),
+                        argumentName = "result"
+                    )
+                )
+            }
 
         } else {
             println("222")
@@ -339,26 +394,31 @@ fun MainScreenView(
         }
     }
 
-    Scaffold(topBar = {
-        NavigationBar {
-            Text(name)
-        }
-    }, 
-        modifier =  Modifier.systemBarsPadding()) { padding ->
+    Scaffold(
+        topBar = {
+            NavigationBar {
+                Text(name)
+            }
+        },
+        modifier = Modifier.systemBarsPadding()
+    ) { padding ->
         var inputText by remember { mutableStateOf(TextFieldValue("")) }
 
         val dharmaTemplates = remember {
             dharmasMap.keys.mapIndexed { index, key ->
                 TemplateItem(
                     id = index,
-                    dharma = LineItem.Dharma(id = idCounter, name = key, body = dharmasMap[key] ?: "")
+                    dharma = LineItem.Dharma(
+                        id = idCounter,
+                        name = key,
+                        body = dharmasMap[key] ?: ""
+                    )
                 )
 
             }.toMutableStateList()
         }
 
         var selectedDharmaItem by remember { mutableStateOf<LineItem.Dharma?>(null) }
-//        var dharmaArguments = remember { mutableStateListOf<LineItem.Dharma>() }
         var selectedItemIndex by remember { mutableIntStateOf(0) }
 
         var dharmaChainToName by remember { mutableStateOf<List<LineItem>?>(null) }
@@ -395,6 +455,7 @@ fun MainScreenView(
                                 DharmaItemView(
                                     dharma = dharma,
                                     lineNumber = i,
+                                    result = "temp",
                                     onItemSelected = {
                                         selectedDharmaItem = dharma
                                         selectedItemIndex = i
@@ -422,36 +483,36 @@ fun MainScreenView(
                     }
 
                     item {
-//                        InterpretatorView(dharmaChains, onChainNamed = {
-//                            dharmaChainToName = dharmaChains.select<LineItem, LineItem>(
-//                                breakCondition = { it, selected ->
-//                                    it is LineItem.End
-//                                },
-//                                fromEnd = true,
-//                            ).selected
-//                        })
-                    }
-
-                    item {
                         Row {
                             TextField(value = inputText, onValueChange = {
                                 inputText = it
                             }, modifier = Modifier.weight(1f))
                             Button(onClick = {
-                                if (inputText.text.isEmpty()) {
+                                val input = inputText.text.trim()
+                                if (input.isEmpty()) {
                                     println("debug: 2")
                                     dharmaChains.add(LineItem.End())
 
                                 } else {
-                                    val parts = inputText.text.split("=")
-                                    val template = parts[0]
-                                    val name = if (parts.size > 1) parts[1] else ""
-                                    val dharma = LineItem.Dharma(
-                                        name = name,
-                                        body = template
-                                    )
-                                    println("debug: 3")
-                                    addDharmaToChain(dharma)
+                                    val values = input.split(" ")
+                                    println("keys: "+dharmasMap.keys)
+                                    values.forEach { value ->
+                                        if (dharmasMap.keys.contains(value)) {
+                                            println("Value1: $value")
+                                            val template =
+                                                dharmaTemplates.first { it.dharma.name == value }
+                                            addDharmaToChain(template.dharma.copy(idCounter))
+
+                                        } else {
+                                            println("Value2: $value")
+                                            val dharma = LineItem.Dharma(
+                                                name = "",
+                                                body = value
+                                            )
+                                            println("debug: 3")
+                                            addDharmaToChain(dharma)
+                                        }
+                                    }
                                     inputText = TextFieldValue("")
                                 }
 
@@ -518,6 +579,7 @@ fun MainScreenView(
 fun DharmaItemView(
     dharma: LineItem.Dharma,
     lineNumber: Int,
+    result: String,
     onItemSelected: (LineItem) -> Unit,
     onRemoveClick: (LineItem) -> Unit,
 ) {
@@ -536,7 +598,16 @@ fun DharmaItemView(
             )
             Text(
                 text = if (dharma.name.isEmpty()) dharma.body else dharma.name,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            Text(
+                text = "$result",
+                maxLines = 1,
+                color = Color.Gray,
+                modifier = Modifier.width(100.dp)
             )
 
             Button(onClick = {
@@ -560,55 +631,53 @@ fun DharmaItemView(
     }
 }
 
-var lastResult = ""
-
-@Composable
-private fun InterpretatorView(
-    dharmaChain: SnapshotStateList<LineItem>,
-    onChainNamed: (String) -> Unit
-) {
-    println("InterpretatorView")
-    Column(modifier = Modifier.background(Color.Gray)) {
-        println("debug: 111")
-        var lastChain1 = dharmaChain.divideBy<LineItem, LineItem.Dharma>(
-            condition = { it, selected ->
-                it is LineItem.Dharma
-            },
-            breakCondition = { it, selected ->
-                it is LineItem.End
-            },
-            fromEnd = true,
-        ).selected
-
-        var lastChain = dharmaChain.filter { it is LineItem.Dharma }.map { it as LineItem.Dharma }
-        println("debug: 222")
-        val lastDharma =
-            dharmaChain.last() as LineItem.Dharma// (lastChain minus 1).selected.first()
-//        val bodyParts = lastDharma.body.replace(" ", "").split("=")
-//        when {
-//            bodyParts.size > 1 && bodyParts[0].startsWith(":chain:") -> {
-//                onChainNamed(bodyParts[1])
-//                return
-//            }
+//@Composable
+//private fun InterpretatorView(
+//    dharmaChain: SnapshotStateList<LineItem>,
+//    onChainNamed: (String) -> Unit
+//) {
+//    println("InterpretatorView")
+//    Column(modifier = Modifier.background(Color.Gray)) {
+//        println("debug: 111")
+//        var lastChain1 = dharmaChain.divideBy<LineItem, LineItem.Dharma>(
+//            condition = { it, selected ->
+//                it is LineItem.Dharma
+//            },
+//            breakCondition = { it, selected ->
+//                it is LineItem.End
+//            },
+//            fromEnd = true,
+//        ).selected
+//
+//        var lastChain = dharmaChain.filter { it is LineItem.Dharma }.map { it as LineItem.Dharma }
+//        println("debug: 222")
+//        val lastDharma =
+//            dharmaChain.last() as LineItem.Dharma// (lastChain minus 1).selected.first()
+////        val bodyParts = lastDharma.body.replace(" ", "").split("=")
+////        when {
+////            bodyParts.size > 1 && bodyParts[0].startsWith(":chain:") -> {
+////                onChainNamed(bodyParts[1])
+////                return
+////            }
+////        }
+//
+//        println("debug: 333")
+//        var console = ""
+//        try {
+//            lastResult = transformAtomsChain(lastChain)
+//        } catch (e: Exception) {
+//            e.printStackTrace()
 //        }
-
-        println("debug: 333")
-        var console = ""
-        try {
-            lastResult = transformAtomsChain(lastChain)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        println("debug: 444")
-        console = interpretCode(
-            result = lastResult,
-            transformation = lastDharma.body
-        )
-        println("debug: 555")
-        Text("Console: $console")
-    }
-}
+//
+//        println("debug: 444")
+//        console = interpretCode(
+//            result = lastResult,
+//            transformation = lastDharma.body
+//        )
+//        println("debug: 555")
+//        Text("Console: $console")
+//    }
+//}
 
 @Composable
 fun TemplateEditorView(

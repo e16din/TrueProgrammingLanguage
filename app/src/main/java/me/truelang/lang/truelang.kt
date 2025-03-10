@@ -185,7 +185,7 @@ fun interpretCode(transformation: String, result: String): String {
             }"
         }
 
-        "add", "multiply" -> {
+        "add", "multiply",  -> {
 
             interpretMath(addBrackets(result))
         }
@@ -272,9 +272,11 @@ fun fillTransformations(): MutableMap<String, String> {
             defaultDharmaTemplates.indexOf('\n', startIndex = index)
         )
         val body = defaultDharmaTemplates.substring(leftIndex, index).trim()
-        val name = defaultDharmaTemplates.substring(index + 1, rightIndex).trim()
+        val names = defaultDharmaTemplates.substring(index + 1, rightIndex).trim().split(",")
 
-        transformationsMap.put(name, body)
+        names.forEach { name ->
+            transformationsMap.put(name.trim(), body.trim())
+        }
 
         defaultDharmaTemplates = defaultDharmaTemplates.replaceRange(leftIndex, rightIndex, "")
         index = defaultDharmaTemplates.indexOf('=', startIndex = 0)
@@ -287,70 +289,71 @@ fun fillTransformations(): MutableMap<String, String> {
 }
 
 val dharmasMap = fillTransformations()
-fun transformAtomsChain(templateItems: List<LineItem.Dharma>): String {
-    val endOfChainStr = ""
 
-    var codeBlock = ""
-    val dataItems = mutableListOf<String>()
-    var nextAtomsGets = 0
-    for (i in templateItems.indices) {
-        if (nextAtomsGets > 0) {
-            nextAtomsGets -= 1
-            continue
-        }
-        val atom = templateItems[i].body.trim()
-        if (atom == endOfChainStr) {
-            if (dataItems.isNotEmpty()) {
-                codeBlock += "${dataItems.last()}\n"
-                dataItems.clear()
-            }
-        }
-
-        if (!dharmasMap.contains(atom)) {
-            if (!atom.isEmpty() && !atom.startsWith("//")) {
-                dataItems.add(atom)
-            }
-
-        } else {
-            val template = dharmasMap[atom]
-            var newData = "$template"
-            var index = newData.indexOf('$') // todo: add |:
-            val totalCount = newData.count { it == '$' }
-
-            var counter = 1
-            while (index != -1) {
-
-                val dataIndex = dataItems.size - 1 - (totalCount - counter)
-                if (dataIndex >= 0) {
-                    newData = newData.replaceRange(
-                        index,
-                        index + 1,
-                        dataItems[dataIndex].trim()
-                    )
-                } else {
-                    val nextAtom = templateItems[i + 1].body.trim()
-                    nextAtomsGets += 1
-                    //dataItems.add(nextAtom)
-                    newData = newData.replaceRange(
-                        index,
-                        index + 1,
-                        nextAtom.trim()
-                    )
-                }
-                index = newData.indexOf('$', startIndex = index + 1)
-                counter += 1
-            }
-
-            println("newData: $newData")
-            dataItems.add(newData)
-        }
-    }
-    if (dataItems.isNotEmpty()) {
-        codeBlock += "${dataItems.last()}\n"
-    }
-
-    return codeBlock
-}
+//fun transformAtomsChain(templateItems: List<LineItem.Dharma>): String {
+//    val endOfChainStr = ""
+//
+//    var codeBlock = ""
+//    val dataItems = mutableListOf<String>()
+//    var nextAtomsGets = 0
+//    for (i in templateItems.indices) {
+//        if (nextAtomsGets > 0) {
+//            nextAtomsGets -= 1
+//            continue
+//        }
+//        val atom = templateItems[i].body.trim()
+//        if (atom == endOfChainStr) {
+//            if (dataItems.isNotEmpty()) {
+//                codeBlock += "${dataItems.last()}\n"
+//                dataItems.clear()
+//            }
+//        }
+//
+//        if (!dharmasMap.contains(atom)) {
+//            if (!atom.isEmpty() && !atom.startsWith("//")) {
+//                dataItems.add(atom)
+//            }
+//
+//        } else {
+//            val template = dharmasMap[atom]
+//            var newData = "$template"
+//            var index = newData.indexOf('$') // todo: add |:
+//            val totalCount = newData.count { it == '$' }
+//
+//            var counter = 1
+//            while (index != -1) {
+//
+//                val dataIndex = dataItems.size - 1 - (totalCount - counter)
+//                if (dataIndex >= 0) {
+//                    newData = newData.replaceRange(
+//                        index,
+//                        index + 1,
+//                        dataItems[dataIndex].trim()
+//                    )
+//                } else {
+//                    val nextAtom = templateItems[i + 1].body.trim()
+//                    nextAtomsGets += 1
+//                    //dataItems.add(nextAtom)
+//                    newData = newData.replaceRange(
+//                        index,
+//                        index + 1,
+//                        nextAtom.trim()
+//                    )
+//                }
+//                index = newData.indexOf('$', startIndex = index + 1)
+//                counter += 1
+//            }
+//
+//            println("newData: $newData")
+//            dataItems.add(newData)
+//        }
+//    }
+//    if (dataItems.isNotEmpty()) {
+//        codeBlock += "${dataItems.last()}\n"
+//    }
+//
+//    return codeBlock
+//}
 
 fun String.isDigitsOnly(withChar: Char): Boolean {
     val len = this.length
